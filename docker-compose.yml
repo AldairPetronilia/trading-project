@@ -1,0 +1,5 @@
+services:
+  energy-data-service:
+    build: energy_data_service
+    volumes:
+      - "./logs:/app/logs"
