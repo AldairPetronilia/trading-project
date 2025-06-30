@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from app.model.collection_status import CollectionStatus
@@ -26,7 +26,7 @@ class CollectionResult:
     data_points: list[RawDataPoint] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-    collection_time: datetime = field(default_factory=datetime.utcnow)
+    collection_time: datetime = field(default_factory=lambda: datetime.now(UTC))
     start_requested: datetime | None = None
     end_requested: datetime | None = None
     metadata: dict[str, Any] = field(default_factory=dict)

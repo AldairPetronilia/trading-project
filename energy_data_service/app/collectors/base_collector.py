@@ -62,6 +62,7 @@ class BaseCollector(ABC):
         """Cleanup resources used by the collector."""
         if self.session:
             await self.session.close()
+            self.session = None
         log.info("Collector %s cleaned up resources.", self.name)
 
     def _get_default_headers(self) -> dict[str, str]:
