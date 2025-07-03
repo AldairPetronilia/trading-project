@@ -1,6 +1,6 @@
 package org.example.adapter;
 
-import org.example.model.ContractMarketAgreementType;
+import org.example.model.common.ContractMarketAgreementType;
 
 import javax.xml.bind.annotation.adapters.XmlAdapter;
 

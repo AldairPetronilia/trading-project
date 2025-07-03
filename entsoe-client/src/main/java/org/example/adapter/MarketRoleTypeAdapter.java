@@ -1,6 +1,6 @@
 package org.example.adapter;
 
-import org.example.model.MarketRoleType;
+import org.example.model.common.MarketRoleType;
 
 import javax.xml.bind.annotation.adapters.XmlAdapter;
 

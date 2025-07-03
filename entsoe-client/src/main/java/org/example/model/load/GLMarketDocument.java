@@ -1,9 +1,11 @@
-package org.example.model;
+package org.example.model.load;
+
+// ==================== LOAD DOMAIN RESPONSE OBJECTS ====================
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.example.adapter.DocumentTypeAdapter;
-import org.example.adapter.MarketRoleTypeAdapter;
+import org.example.adapter.*;
+import org.example.model.common.*;
 
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -12,13 +14,14 @@ import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
-// Root element class
-@XmlRootElement(name = "Publication_MarketDocument", namespace = "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:0")
+// Root element for Load Domain responses
+@XmlRootElement(name = "GL_MarketDocument", namespace = "urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0")
 @XmlAccessorType(XmlAccessType.FIELD)
 @Data
 @NoArgsConstructor
-public class PublicationMarketDocument {
+public class GLMarketDocument {
 
     @XmlElement(name = "mRID")
     private String mRID;
@@ -29,6 +32,10 @@ public class PublicationMarketDocument {
     @XmlElement(name = "type")
     @XmlJavaTypeAdapter(DocumentTypeAdapter.class)
     private DocumentType type;
+
+    @XmlElement(name = "process.processType")
+    @XmlJavaTypeAdapter(ProcessTypeAdapter.class)
+    private ProcessType processType;
 
     @XmlElement(name = "sender_MarketParticipant.mRID")
     private MarketParticipantMRID senderMarketParticipantMRID;
@@ -47,11 +54,11 @@ public class PublicationMarketDocument {
     @XmlElement(name = "createdDateTime")
     private String createdDateTime;
 
-    @XmlElement(name = "period.timeInterval")
-    private TimeInterval periodTimeInterval;
+    @XmlElement(name = "time_Period.timeInterval")
+    private TimeInterval timePeriodTimeInterval;
 
     @XmlElement(name = "TimeSeries")
-    private TimeSeries timeSeries;
+    private List<LoadTimeSeries> timeSeries;
 
     // Helper method to get created date as LocalDateTime
     public LocalDateTime getCreatedDateTimeAsLocalDateTime() {

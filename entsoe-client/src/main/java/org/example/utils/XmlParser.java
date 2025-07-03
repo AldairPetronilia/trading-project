@@ -1,6 +1,9 @@
 package org.example.utils;
 
-import org.example.model.*;
+import org.example.model.common.*;
+import org.example.model.publication.Point;
+import org.example.model.publication.PublicationMarketDocument;
+import org.example.model.publication.TimeSeries;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;

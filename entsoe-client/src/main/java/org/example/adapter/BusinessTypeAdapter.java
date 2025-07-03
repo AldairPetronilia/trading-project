@@ -1,6 +1,6 @@
 package org.example.adapter;
 
-import org.example.model.BusinessType;
+import org.example.model.common.BusinessType;
 
 import javax.xml.bind.annotation.adapters.XmlAdapter;
 

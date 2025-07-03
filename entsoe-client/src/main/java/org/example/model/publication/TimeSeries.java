@@ -1,4 +1,4 @@
-package org.example.model;
+package org.example.model.publication;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -6,6 +6,7 @@ import org.example.adapter.AuctionTypeAdapter;
 import org.example.adapter.BusinessTypeAdapter;
 import org.example.adapter.ContractMarketAgreementTypeAdapter;
 import org.example.adapter.CurveTypeAdapter;
+import org.example.model.common.*;
 
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;

@@ -1,6 +1,6 @@
 package org.example.adapter;
 
-import org.example.model.CurveType;
+import org.example.model.common.CurveType;
 
 import javax.xml.bind.annotation.adapters.XmlAdapter;
 

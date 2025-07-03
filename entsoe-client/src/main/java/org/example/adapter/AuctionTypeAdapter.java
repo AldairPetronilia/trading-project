@@ -1,6 +1,6 @@
 package org.example.adapter;
 
-import org.example.model.AuctionType;
+import org.example.model.common.AuctionType;
 
 import javax.xml.bind.annotation.adapters.XmlAdapter;
 

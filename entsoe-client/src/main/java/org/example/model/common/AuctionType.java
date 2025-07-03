@@ -1,4 +1,4 @@
-package org.example.model;
+package org.example.model.common;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -7,18 +7,17 @@ import java.util.Arrays;
 
 @Getter
 @AllArgsConstructor
-public enum Direction {
-    UP("A01", "Up"),
-    DOWN("A02", "Down"),
-    SYMMETRIC("A03", "Symmetric");
+public enum AuctionType {
+    IMPLICIT("A01", "Implicit"),
+    EXPLICIT("A02", "Explicit");
 
     private final String code;
     private final String description;
 
-    public static Direction fromCode(String code) {
+    public static AuctionType fromCode(String code) {
         return Arrays.stream(values())
                 .filter(type -> type.code.equals(code))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown Direction code: " + code));
+                .orElseThrow(() -> new IllegalArgumentException("Unknown AuctionType code: " + code));
     }
 }
