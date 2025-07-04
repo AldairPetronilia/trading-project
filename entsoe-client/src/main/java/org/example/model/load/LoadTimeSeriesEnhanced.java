@@ -16,34 +16,36 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 import java.util.List;
 
+import static org.example.model.load.GLMarketDocument.XML_NAMESPACE;
+
 // Enhanced LoadTimeSeries with ObjectAggregation enum
 @XmlAccessorType(XmlAccessType.FIELD)
 @Data
 @NoArgsConstructor
 public class LoadTimeSeriesEnhanced {
 
-    @XmlElement(name = "mRID")
+    @XmlElement(name = "mRID", namespace = XML_NAMESPACE)
     private String mRID;
 
-    @XmlElement(name = "businessType")
+    @XmlElement(name = "businessType", namespace = XML_NAMESPACE)
     @XmlJavaTypeAdapter(BusinessTypeAdapter.class)
     private BusinessType businessType;
 
-    @XmlElement(name = "objectAggregation")
+    @XmlElement(name = "objectAggregation", namespace = XML_NAMESPACE)
     @XmlJavaTypeAdapter(ObjectAggregationAdapter.class)
     private ObjectAggregation objectAggregation;
 
-    @XmlElement(name = "outBiddingZone_Domain.mRID")
+    @XmlElement(name = "outBiddingZone_Domain.mRID", namespace = XML_NAMESPACE)
     private DomainMRID outBiddingZoneDomainMRID;
 
-    @XmlElement(name = "quantity_Measure_Unit.name")
+    @XmlElement(name = "quantity_Measure_Unit.name", namespace = XML_NAMESPACE)
     private String quantityMeasureUnitName;
 
-    @XmlElement(name = "curveType")
+    @XmlElement(name = "curveType", namespace = XML_NAMESPACE)
     @XmlJavaTypeAdapter(CurveTypeAdapter.class)
     private CurveType curveType;
 
-    @XmlElement(name = "Period")
+    @XmlElement(name = "Period", namespace = XML_NAMESPACE)
     private List<LoadPeriod> periods;
 
     // Helper method to get area code

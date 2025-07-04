@@ -8,6 +8,8 @@ import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlElement;
 
+import static org.example.model.load.GLMarketDocument.XML_NAMESPACE;
+
 // Point class for Load Domain with quantity instead of price
 @XmlAccessorType(XmlAccessType.FIELD)
 @Data
@@ -15,9 +17,9 @@ import javax.xml.bind.annotation.XmlElement;
 @AllArgsConstructor
 public class QuantityPoint {
 
-    @XmlElement(name = "position")
+    @XmlElement(name = "position", namespace = XML_NAMESPACE)
     private Integer position;
 
-    @XmlElement(name = "quantity")
+    @XmlElement(name = "quantity", namespace = XML_NAMESPACE)
     private Double quantity;
 }

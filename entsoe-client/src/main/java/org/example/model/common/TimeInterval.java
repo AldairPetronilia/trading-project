@@ -11,17 +11,14 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 // Time Interval class
-@XmlAccessorType(XmlAccessType.FIELD)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class TimeInterval {
+public abstract class TimeInterval {
 
-    @XmlElement(name = "start")
-    private String start;
+    protected String start;
 
-    @XmlElement(name = "end")
-    private String end;
+    protected String end;
 
     // Helper methods to get dates as LocalDateTime
     public LocalDateTime getStartAsLocalDateTime() {

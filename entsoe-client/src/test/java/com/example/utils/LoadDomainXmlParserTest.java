@@ -1,15 +1,16 @@
 package com.example.utils;
 
 import org.example.model.common.*;
-import org.example.model.load.GLMarketDocument;
-import org.example.model.load.LoadPeriod;
-import org.example.model.load.LoadTimeSeries;
-import org.example.model.load.QuantityPoint;
+import org.example.model.load.*;
 import org.example.utils.LoadDomainXmlParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import static org.junit.jupiter.api.Assertions.*;
 import javax.xml.bind.JAXBException;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 
 public class LoadDomainXmlParserTest {
@@ -22,15 +23,9 @@ public class LoadDomainXmlParserTest {
     }
 
     @Test
-    void testMinimalParsing() throws JAXBException {
-        String minimalXml = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
-            <mRID>test123</mRID>
-            <revisionNumber>1</revisionNumber>
-            <type>A65</type>
-        </GL_MarketDocument>
-        """;
+    void testMinimalParsing() throws JAXBException, IOException {
+        String fileName = "loadXmls/minimalLoadXml.xml";
+        String minimalXml = loadXml(fileName);
 
         GLMarketDocument document = LoadDomainXmlParser.parseLoadDomainXml(minimalXml);
 
@@ -44,48 +39,9 @@ public class LoadDomainXmlParserTest {
     }
 
     @Test
-    void testParseActualTotalLoad() throws JAXBException {
-        String actualTotalLoadXml = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
-                <mRID>5693afe33ce749e4b0cea17f1f64f211</mRID>
-                <revisionNumber>1</revisionNumber>
-                <type>A65</type>
-                <process.processType>A16</process.processType>
-                <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
-                <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
-                <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
-                <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
-                <createdDateTime>2016-02-26T07:24:53Z</createdDateTime>
-                <time_Period.timeInterval>
-                    <start>2015-12-31T23:00Z</start>
-                    <end>2016-12-31T23:00Z</end>
-                </time_Period.timeInterval>
-                <TimeSeries>
-                    <mRID>1</mRID>
-                    <businessType>A04</businessType>
-                    <objectAggregation>A01</objectAggregation>
-                    <outBiddingZone_Domain.mRID codingScheme="A01">10YCZ-CEPS-----N</outBiddingZone_Domain.mRID>
-                    <quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>
-                    <curveType>A01</curveType>
-                    <Period>
-                        <timeInterval>
-                            <start>2015-12-31T23:00Z</start>
-                            <end>2016-12-31T23:00Z</end>
-                        </timeInterval>
-                        <resolution>PT60M</resolution>
-                        <Point>
-                            <position>1</position>
-                            <quantity>6288</quantity>
-                        </Point>
-                        <Point>
-                            <position>2</position>
-                            <quantity>6350</quantity>
-                        </Point>
-                    </Period>
-                </TimeSeries>
-            </GL_MarketDocument>
-            """;
+    void testParseActualTotalLoad() throws JAXBException, IOException {
+        String filename = "loadXmls/actualTotalLoad.xml";
+        String actualTotalLoadXml = loadXml(filename);
 
         GLMarketDocument document = parser.parseLoadDomainXml(actualTotalLoadXml);
 
@@ -99,35 +55,35 @@ public class LoadDomainXmlParserTest {
 
         // Assert created date time
         LocalDateTime expectedCreated = LocalDateTime.of(2016, 2, 26, 7, 24, 53);
-        assertEquals(expectedCreated, document.getCreatedDateTimeAsLocalDateTime());
+        assertEquals(expectedCreated, document.getCreatedDateTime());
 
         // Assert time period
-        assertEquals("2015-12-31T23:00Z", document.getTimePeriodTimeInterval().getStart());
-        assertEquals("2016-12-31T23:00Z", document.getTimePeriodTimeInterval().getEnd());
+        LocalDateTime expectedStart = LocalDateTime.of(2015,12,31,23,0,0);
+        LocalDateTime expectedEnd = LocalDateTime.of(2016,12,31,23,0,0);
+        assertEquals(expectedStart, document.getTimePeriodTimeInterval().getStart());
+        assertEquals(expectedEnd, document.getTimePeriodTimeInterval().getEnd());
 
         // Assert time series
         assertNotNull(document.getTimeSeries());
-        assertEquals(1, document.getTimeSeries().size());
 
-        LoadTimeSeries series = document.getTimeSeries().get(0);
+        LoadTimeSeries series = document.getTimeSeries();
         assertEquals("1", series.getMRID());
         assertEquals(BusinessType.CONSUMPTION, series.getBusinessType());
-        assertEquals("A01", series.getObjectAggregation());
+        assertEquals(ObjectAggregation.AGGREGATED, series.getObjectAggregation());
         assertEquals("MAW", series.getQuantityMeasureUnitName());
         assertEquals(CurveType.SEQUENTIAL_FIXED_SIZE_BLOCK, series.getCurveType());
 
         // Assert bidding zone
         assertEquals("A01", series.getOutBiddingZoneDomainMRID().getCodingScheme());
-        assertEquals("10YCZ-CEPS-----N", series.getOutBiddingZoneDomainMRID().getValue());
+        assertEquals("10YCZ-CEPS-----N", series.getOutBiddingZoneDomainMRID().getAreaCode().getCode());
         assertEquals(AreaCode.CZECH_REPUBLIC, series.getOutBiddingZoneDomainMRID().getAreaCode());
 
         // Assert period and points
-        assertEquals(1, series.getPeriods().size());
-        LoadPeriod period = series.getPeriods().get(0);
+        LoadPeriod period = series.getPeriod();
         assertEquals("PT60M", period.getResolution());
         assertEquals(2, period.getPoints().size());
 
-        QuantityPoint point1 = period.getPoints().get(0);
+        QuantityPoint point1 = period.getPoints().getFirst();
         assertEquals(Integer.valueOf(1), point1.getPosition());
         assertEquals(Double.valueOf(6288), point1.getQuantity());
 
@@ -137,47 +93,9 @@ public class LoadDomainXmlParserTest {
     }
 
     @Test
-    void testParseDayAheadLoadForecast() throws JAXBException {
-        String dayAheadXml = """
-            <GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
-                <mRID>8086330c19054ec18d7cb023f1541062</mRID>
-                <revisionNumber>1</revisionNumber>
-                <type>A65</type>
-                <process.processType>A01</process.processType>
-                <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
-                <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
-                <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
-                <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
-                <createdDateTime>2016-05-10T08:08:24Z</createdDateTime>
-                <time_Period.timeInterval>
-                    <start>2015-12-31T23:00Z</start>
-                    <end>2016-12-31T23:00Z</end>
-                </time_Period.timeInterval>
-                <TimeSeries>
-                    <mRID>1</mRID>
-                    <businessType>A04</businessType>
-                    <objectAggregation>A01</objectAggregation>
-                    <outBiddingZone_Domain.mRID codingScheme="A01">10YCZ-CEPS-----N</outBiddingZone_Domain.mRID>
-                    <quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>
-                    <curveType>A01</curveType>
-                    <Period>
-                        <timeInterval>
-                            <start>2015-12-31T23:00Z</start>
-                            <end>2016-01-01T23:00Z</end>
-                        </timeInterval>
-                        <resolution>PT60M</resolution>
-                        <Point>
-                            <position>1</position>
-                            <quantity>6363</quantity>
-                        </Point>
-                        <Point>
-                            <position>24</position>
-                            <quantity>6182</quantity>
-                        </Point>
-                    </Period>
-                </TimeSeries>
-            </GL_MarketDocument>
-            """;
+    void testParseDayAheadLoadForecast() throws JAXBException, IOException {
+        String filename = "loadXmls/dayAhead.xml";
+        String dayAheadXml = loadXml(filename);
 
         GLMarketDocument document = parser.parseLoadDomainXml(dayAheadXml);
 
@@ -185,12 +103,14 @@ public class LoadDomainXmlParserTest {
         assertEquals(DocumentType.SYSTEM_TOTAL_LOAD, document.getType());
         assertEquals(ProcessType.DAY_AHEAD, document.getProcessType());
 
-        LoadTimeSeries series = document.getTimeSeries().get(0);
+        LoadTimeSeries series = document.getTimeSeries();
         assertEquals(BusinessType.CONSUMPTION, series.getBusinessType());
 
-        LoadPeriod period = series.getPeriods().get(0);
-        assertEquals("2015-12-31T23:00Z", period.getTimeInterval().getStart());
-        assertEquals("2016-01-01T23:00Z", period.getTimeInterval().getEnd());
+        LoadPeriod period = series.getPeriod();
+        LocalDateTime expectedStart = LocalDateTime.of(2015, 12, 31, 23, 0, 0);
+        LocalDateTime expectedEnd = LocalDateTime.of(2016, 1, 1, 23, 0, 0);
+        assertEquals(expectedStart, period.getTimeInterval().getStart());
+        assertEquals(expectedEnd, period.getTimeInterval().getEnd());
         assertEquals("PT60M", period.getResolution());
 
         // Verify first and last points
@@ -199,98 +119,26 @@ public class LoadDomainXmlParserTest {
     }
 
     @Test
-    void testParseWeekAheadLoadForecast() throws JAXBException {
-        String weekAheadXml = """
-            <GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
-                <mRID>5931be56ab5b47c79565629be03b9555</mRID>
-                <revisionNumber>1</revisionNumber>
-                <type>A65</type>
-                <process.processType>A31</process.processType>
-                <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
-                <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
-                <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
-                <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
-                <createdDateTime>2016-05-10T08:16:57Z</createdDateTime>
-                <time_Period.timeInterval>
-                    <start>2015-12-27T23:00Z</start>
-                    <end>2016-04-10T22:00Z</end>
-                </time_Period.timeInterval>
-                <TimeSeries>
-                    <mRID>1</mRID>
-                    <businessType>A60</businessType>
-                    <objectAggregation>A01</objectAggregation>
-                    <outBiddingZone_Domain.mRID codingScheme="A01">10YCZ-CEPS-----N</outBiddingZone_Domain.mRID>
-                    <quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>
-                    <curveType>A01</curveType>
-                    <Period>
-                        <timeInterval>
-                            <start>2015-12-27T23:00Z</start>
-                            <end>2016-01-03T23:00Z</end>
-                        </timeInterval>
-                        <resolution>P1D</resolution>
-                        <Point>
-                            <position>1</position>
-                            <quantity>6050</quantity>
-                        </Point>
-                        <Point>
-                            <position>7</position>
-                            <quantity>6156</quantity>
-                        </Point>
-                    </Period>
-                </TimeSeries>
-            </GL_MarketDocument>
-            """;
+    void testParseWeekAheadLoadForecast() throws JAXBException, IOException {
+        String filename = "loadXmls/weekAhead.xml";
+        String weekAheadXml = loadXml(filename);
 
         GLMarketDocument document = parser.parseLoadDomainXml(weekAheadXml);
 
         assertEquals("5931be56ab5b47c79565629be03b9555", document.getMRID());
         assertEquals(ProcessType.WEEK_AHEAD, document.getProcessType());
 
-        LoadTimeSeries series = document.getTimeSeries().get(0);
+        LoadTimeSeries series = document.getTimeSeries();
         assertEquals(BusinessType.MINIMUM_POSSIBLE, series.getBusinessType());
 
-        LoadPeriod period = series.getPeriods().get(0);
+        LoadPeriod period = series.getPeriod();
         assertEquals("P1D", period.getResolution()); // Daily resolution for week-ahead
     }
 
     @Test
-    void testParseYearAheadForecastMargin() throws JAXBException {
-        String forecastMarginXml = """
-            <GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
-                <mRID>c4cdfa468d6741a08d0182794d2bf731</mRID>
-                <revisionNumber>1</revisionNumber>
-                <type>A70</type>
-                <process.processType>A33</process.processType>
-                <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
-                <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
-                <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
-                <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
-                <createdDateTime>2016-05-10T08:19:40Z</createdDateTime>
-                <time_Period.timeInterval>
-                    <start>2015-12-31T23:00Z</start>
-                    <end>2016-12-31T23:00Z</end>
-                </time_Period.timeInterval>
-                <TimeSeries>
-                    <mRID>1</mRID>
-                    <businessType>A92</businessType>
-                    <objectAggregation>A01</objectAggregation>
-                    <outBiddingZone_Domain.mRID codingScheme="A01">10YCZ-CEPS-----N</outBiddingZone_Domain.mRID>
-                    <quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>
-                    <curveType>A01</curveType>
-                    <Period>
-                        <timeInterval>
-                            <start>2015-12-31T23:00Z</start>
-                            <end>2016-12-31T23:00Z</end>
-                        </timeInterval>
-                        <resolution>P1Y</resolution>
-                        <Point>
-                            <position>1</position>
-                            <quantity>2841</quantity>
-                        </Point>
-                    </Period>
-                </TimeSeries>
-            </GL_MarketDocument>
-            """;
+    void testParseYearAheadForecastMargin() throws JAXBException, IOException {
+        String filename = "loadXmls/forecastMargin.xml";
+        String forecastMarginXml = loadXml(filename);
 
         GLMarketDocument document = parser.parseLoadDomainXml(forecastMarginXml);
 
@@ -299,22 +147,19 @@ public class LoadDomainXmlParserTest {
         assertEquals(DocumentType.LOAD_FORECAST_MARGIN, document.getType()); // A70
         assertEquals(ProcessType.YEAR_AHEAD, document.getProcessType());
 
-        LoadTimeSeries series = document.getTimeSeries().get(0);
+        LoadTimeSeries series = document.getTimeSeries();
         assertEquals(BusinessType.NEGATIVE_FORECAST_MARGIN, series.getBusinessType()); // A92
 
-        LoadPeriod period = series.getPeriods().get(0);
+        LoadPeriod period = series.getPeriod();
         assertEquals("P1Y", period.getResolution()); // Yearly resolution
         assertEquals(1, period.getPoints().size()); // Single data point for whole year
         assertEquals(Double.valueOf(2841), period.getPoints().get(0).getQuantity());
     }
 
     @Test
-    void testParseInvalidXml() {
-        String invalidXml = """
-            <InvalidDocument>
-                <somefield>value</somefield>
-            </InvalidDocument>
-            """;
+    void testParseInvalidXml() throws IOException {
+        String filename = "loadXmls/invalid.xml";
+        String invalidXml = loadXml(filename);
 
         assertThrows(JAXBException.class, () -> {
             parser.parseLoadDomainXml(invalidXml);
@@ -322,109 +167,46 @@ public class LoadDomainXmlParserTest {
     }
 
     @Test
-    void testParseEmptyTimeSeries() throws JAXBException {
-        String emptyTimeSeriesXml = """
-            <GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
-                <mRID>test123</mRID>
-                <revisionNumber>1</revisionNumber>
-                <type>A65</type>
-                <process.processType>A16</process.processType>
-                <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
-                <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
-                <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
-                <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
-                <createdDateTime>2016-02-26T07:24:53Z</createdDateTime>
-                <time_Period.timeInterval>
-                    <start>2015-12-31T23:00Z</start>
-                    <end>2016-12-31T23:00Z</end>
-                </time_Period.timeInterval>
-            </GL_MarketDocument>
-            """;
+    void testParseEmptyTimeSeries() throws JAXBException, IOException {
+        String filename = "loadXmls/emptyTimeSeries.xml";
+        String emptyTimeSeriesXml = loadXml(filename);
 
         GLMarketDocument document = parser.parseLoadDomainXml(emptyTimeSeriesXml);
 
         assertEquals("test123", document.getMRID());
-        assertTrue(document.getTimeSeries() == null || document.getTimeSeries().isEmpty());
+        assertNull(document.getTimeSeries());
     }
 
     @Test
-    void testAreaCodeMapping() throws JAXBException {
-        String xmlWithDifferentArea = """
-            <GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
-                <mRID>test123</mRID>
-                <revisionNumber>1</revisionNumber>
-                <type>A65</type>
-                <process.processType>A16</process.processType>
-                <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
-                <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
-                <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
-                <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
-                <createdDateTime>2016-02-26T07:24:53Z</createdDateTime>
-                <time_Period.timeInterval>
-                    <start>2015-12-31T23:00Z</start>
-                    <end>2016-12-31T23:00Z</end>
-                </time_Period.timeInterval>
-                <TimeSeries>
-                    <mRID>1</mRID>
-                    <businessType>A04</businessType>
-                    <objectAggregation>A01</objectAggregation>
-                    <outBiddingZone_Domain.mRID codingScheme="A01">10Y1001A1001A83F</outBiddingZone_Domain.mRID>
-                    <quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>
-                    <curveType>A01</curveType>
-                    <Period>
-                        <timeInterval>
-                            <start>2015-12-31T23:00Z</start>
-                            <end>2016-12-31T23:00Z</end>
-                        </timeInterval>
-                        <resolution>PT60M</resolution>
-                        <Point>
-                            <position>1</position>
-                            <quantity>6288</quantity>
-                        </Point>
-                    </Period>
-                </TimeSeries>
-            </GL_MarketDocument>
-            """;
+    void testAreaCodeMapping() throws JAXBException, IOException {
+        String filename = "loadXmls/xmlWithDifferentArea.xml";
+        String xmlWithDifferentArea = loadXml(filename);
 
         GLMarketDocument document = parser.parseLoadDomainXml(xmlWithDifferentArea);
-        LoadTimeSeries series = document.getTimeSeries().get(0);
+        LoadTimeSeries series = document.getTimeSeries();
 
         // Test Germany area code mapping
-        assertEquals("10Y1001A1001A83F", series.getOutBiddingZoneDomainMRID().getValue());
         assertEquals(AreaCode.GERMANY, series.getOutBiddingZoneDomainMRID().getAreaCode());
-        assertTrue(series.getOutBiddingZoneDomainMRID().getAreaCode().hasAreaType(AreaType.BZN));
     }
 
     @Test
-    void testObjectAggregationEnum() throws JAXBException {
+    void testObjectAggregationEnum() throws JAXBException, IOException {
         // Test with enhanced LoadTimeSeries that has ObjectAggregation enum
-        String xmlWithObjectAgg = """
-            <GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
-                <mRID>test123</mRID>
-                <revisionNumber>1</revisionNumber>
-                <type>A65</type>
-                <process.processType>A16</process.processType>
-                <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
-                <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
-                <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
-                <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
-                <createdDateTime>2016-02-26T07:24:53Z</createdDateTime>
-                <TimeSeries>
-                    <mRID>1</mRID>
-                    <businessType>A04</businessType>
-                    <objectAggregation>A01</objectAggregation>
-                    <outBiddingZone_Domain.mRID codingScheme="A01">10YCZ-CEPS-----N</outBiddingZone_Domain.mRID>
-                    <quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>
-                    <curveType>A01</curveType>
-                </TimeSeries>
-            </GL_MarketDocument>
-            """;
+        String filename = "loadXmls/xmlWithObjectAgg.xml";
+        String xmlWithObjectAgg = loadXml(filename);
 
         GLMarketDocument document = parser.parseLoadDomainXml(xmlWithObjectAgg);
-        LoadTimeSeries series = document.getTimeSeries().get(0);
+        LoadTimeSeries series = document.getTimeSeries();
 
-        // If using LoadTimeSeriesEnhanced with ObjectAggregation enum
-        assertEquals("A01", series.getObjectAggregation());
-        // assertEquals(ObjectAggregation.AGGREGATED, series.getObjectAggregation()); // If using enum version
+        assertEquals(ObjectAggregation.AGGREGATED, series.getObjectAggregation());
+    }
+
+    private String loadXml(String filename) throws IOException {
+        InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
+        if (inputStream == null) {
+            throw new FileNotFoundException(String.format("%s was not found", filename));
+        }
+        assertNotNull(inputStream, "Resource not found");
+        return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
     }
 }

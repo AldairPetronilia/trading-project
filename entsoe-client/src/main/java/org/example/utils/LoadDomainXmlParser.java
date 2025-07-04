@@ -32,47 +32,4 @@ public class LoadDomainXmlParser {
         marshaller.marshal(document, writer);
         return writer.toString();
     }
-
-    // Example usage demonstrating Load Domain response parsing
-    public static void main(String[] args) {
-        try {
-            String loadResponseXml = "<!-- Your GL_MarketDocument XML here -->";
-            GLMarketDocument document = parseLoadDomainXml(loadResponseXml);
-
-            System.out.println("Document Type: " + document.getType().getDescription());
-            System.out.println("Process Type: " + document.getProcessType().getDescription());
-            System.out.println("Created: " + document.getCreatedDateTimeAsLocalDateTime());
-
-            // Access time series data
-            for (LoadTimeSeries series : document.getTimeSeries()) {
-                System.out.println("Business Type: " + series.getBusinessType().getDescription());
-                System.out.println("Object Aggregation: " + series.getObjectAggregation());
-                System.out.println("Quantity Unit: " + series.getQuantityMeasureUnitName());
-
-                // Access bidding zone
-                if (series.getOutBiddingZoneDomainMRID() != null) {
-                    AreaCode area = series.getOutBiddingZoneDomainMRID().getAreaCode();
-                    if (area != null) {
-                        System.out.println("Bidding Zone: " + area.getDescription());
-                    }
-                }
-
-                // Access quantity data points
-                for (LoadPeriod period : series.getPeriods()) {
-                    System.out.println("Period: " + period.getTimeInterval().getStart() +
-                            " to " + period.getTimeInterval().getEnd());
-                    System.out.println("Resolution: " + period.getResolution());
-
-                    for (QuantityPoint point : period.getPoints()) {
-                        System.out.println("Position " + point.getPosition() +
-                                ": " + point.getQuantity() + " " +
-                                series.getQuantityMeasureUnitName());
-                    }
-                }
-            }
-
-        } catch (JAXBException e) {
-            e.printStackTrace();
-        }
-    }
 }
