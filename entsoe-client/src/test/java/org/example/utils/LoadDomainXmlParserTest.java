@@ -1,8 +1,7 @@
-package com.example.utils;
+package org.example.utils;
 
 import org.example.model.common.*;
 import org.example.model.load.*;
-import org.example.utils.LoadDomainXmlParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import static org.junit.jupiter.api.Assertions.*;

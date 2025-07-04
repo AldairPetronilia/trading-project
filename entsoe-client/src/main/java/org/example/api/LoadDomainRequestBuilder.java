@@ -28,54 +28,6 @@ public class LoadDomainRequestBuilder {
     private String timeInterval;
     private Integer offset;
 
-    /**
-     * Creates request for Actual Total Load [6.1.A]
-     * One year range limit, minimum MTU period resolution
-     */
-    public static LoadDomainRequestBuilder actualTotalLoad() {
-        return LoadDomainRequestBuilder.builder().build();
-    }
-
-    /**
-     * Creates request for Day-Ahead Total Load Forecast [6.1.B]
-     * One year range limit, minimum one day resolution
-     */
-    public static LoadDomainRequestBuilder dayAheadLoadForecast() {
-        return LoadDomainRequestBuilder.builder().build();
-    }
-
-    /**
-     * Creates request for Week-Ahead Total Load Forecast [6.1.C]
-     * One year range limit, minimum one week resolution
-     */
-    public static LoadDomainRequestBuilder weekAheadLoadForecast() {
-        return LoadDomainRequestBuilder.builder().build();
-    }
-
-    /**
-     * Creates request for Month-Ahead Total Load Forecast [6.1.D]
-     * One year range limit, minimum one month resolution
-     */
-    public static LoadDomainRequestBuilder monthAheadLoadForecast() {
-        return LoadDomainRequestBuilder.builder().build();
-    }
-
-    /**
-     * Creates request for Year-Ahead Total Load Forecast [6.1.E]
-     * One year range limit, minimum one year resolution
-     */
-    public static LoadDomainRequestBuilder yearAheadLoadForecast() {
-        return LoadDomainRequestBuilder.builder().build();
-    }
-
-    /**
-     * Creates request for Year-Ahead Forecast Margin [8.1]
-     * One year range limit, minimum one year resolution
-     */
-    public static LoadDomainRequestBuilder yearAheadForecastMargin() {
-        return LoadDomainRequestBuilder.builder().build();
-    }
-
     // Fluent builder methods
     public LoadDomainRequestBuilder forBiddingZone(AreaCode biddingZone) {
         validateBiddingZone(biddingZone);
@@ -102,6 +54,9 @@ public class LoadDomainRequestBuilder {
 
     /**
      * Builds EntsoEApiRequest for Actual Total Load [6.1.A]
+     * DocumentType: A65 (System Total Load)
+     * ProcessType: A16 (Realised)
+     * One year range limit, minimum MTU period resolution
      */
     public EntsoEApiRequest buildActualTotalLoad() {
         return EntsoEApiRequest.builder()
@@ -116,6 +71,9 @@ public class LoadDomainRequestBuilder {
 
     /**
      * Builds EntsoEApiRequest for Day-Ahead Total Load Forecast [6.1.B]
+     * DocumentType: A65 (System Total Load)
+     * ProcessType: A01 (Day Ahead)
+     * One year range limit, minimum one day resolution
      */
     public EntsoEApiRequest buildDayAheadLoadForecast() {
         return EntsoEApiRequest.builder()
@@ -130,6 +88,9 @@ public class LoadDomainRequestBuilder {
 
     /**
      * Builds EntsoEApiRequest for Week-Ahead Total Load Forecast [6.1.C]
+     * DocumentType: A65 (System Total Load)
+     * ProcessType: A31 (Week Ahead)
+     * One year range limit, minimum one week resolution
      */
     public EntsoEApiRequest buildWeekAheadLoadForecast() {
         return EntsoEApiRequest.builder()
@@ -144,6 +105,9 @@ public class LoadDomainRequestBuilder {
 
     /**
      * Builds EntsoEApiRequest for Month-Ahead Total Load Forecast [6.1.D]
+     * DocumentType: A65 (System Total Load)
+     * ProcessType: A32 (Month Ahead)
+     * One year range limit, minimum one month resolution
      */
     public EntsoEApiRequest buildMonthAheadLoadForecast() {
         return EntsoEApiRequest.builder()
@@ -158,6 +122,9 @@ public class LoadDomainRequestBuilder {
 
     /**
      * Builds EntsoEApiRequest for Year-Ahead Total Load Forecast [6.1.E]
+     * DocumentType: A65 (System Total Load)
+     * ProcessType: A33 (Year Ahead)
+     * One year range limit, minimum one year resolution
      */
     public EntsoEApiRequest buildYearAheadLoadForecast() {
         return EntsoEApiRequest.builder()
@@ -172,6 +139,9 @@ public class LoadDomainRequestBuilder {
 
     /**
      * Builds EntsoEApiRequest for Year-Ahead Forecast Margin [8.1]
+     * DocumentType: A70 (Load Forecast Margin)
+     * ProcessType: A33 (Year Ahead)
+     * One year range limit, minimum one year resolution
      */
     public EntsoEApiRequest buildYearAheadForecastMargin() {
         return EntsoEApiRequest.builder()
