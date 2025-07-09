@@ -2,6 +2,12 @@ version = 1
 revision = 2
 requires-python = ">=3.13"
 
+[manifest]
+members = [
+    "entsoe-client",
+    "trading-project",
+]
+
 [[package]]
 name = "black"
 version = "25.1.0"
@@ -60,6 +66,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/0d/dd/1bec4c5ddb504ca60
 wheels = [
     { url = "https://files.pythonhosted.org/packages/91/a1/cf2472db20f7ce4a6be1253a81cfdf85ad9c7885ffbed7047fb72c24cf87/distlib-0.3.9-py2.py3-none-any.whl", hash = "sha256:47f8c22fd27c27e25a65601af709b38e4f0a45ea4fc2e710f65755fa8caaaf87", size = 468973, upload-time = "2024-10-09T18:35:44.272Z" },
 ]
+
+[[package]]
+name = "entsoe-client"
+version = "0.1.0"
+source = { editable = "entsoe_client" }
 
 [[package]]
 name = "filelock"
@@ -205,7 +216,7 @@ wheels = [
 [[package]]
 name = "trading-project"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 
 [package.dev-dependencies]
 dev = [
