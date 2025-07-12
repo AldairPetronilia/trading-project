@@ -1,15 +1,14 @@
 from enum import Enum
 from typing import Self
 
-from entsoe_client.exceptions.unknown_direction_error import (
-    UnknownDirectionError,
+from entsoe_client.exceptions.unknown_object_aggregation_error import (
+    UnknownObjectAggregationError,
 )
 
 
-class Direction(Enum):
-    UP = ("A01", "Up")
-    DOWN = ("A02", "Down")
-    SYMMETRIC = ("A03", "Symmetric")
+class ObjectAggregation(Enum):
+    AGGREGATED = ("A01", "Aggregated")
+    INDIVIDUAL = ("A02", "Individual")
 
     def __init__(self, code: str, description: str) -> None:
         self.code = code
@@ -20,4 +19,4 @@ class Direction(Enum):
         for member in cls:
             if member.code == code:
                 return member
-        raise UnknownDirectionError(code)
+        raise UnknownObjectAggregationError(code)

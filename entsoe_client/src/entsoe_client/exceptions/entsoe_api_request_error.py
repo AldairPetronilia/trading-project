@@ -1,5 +1,5 @@
-from src.entsoe_client.model.common.area_code import AreaCode
-from src.entsoe_client.model.common.area_type import AreaType
+from entsoe_client.model.common.area_code import AreaCode
+from entsoe_client.model.common.area_type import AreaType
 
 
 class EntsoEApiRequestError(Exception):

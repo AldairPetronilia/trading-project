@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Self
 
-from src.entsoe_client.exceptions.unknown_psr_type_error import (
+from entsoe_client.exceptions.unknown_psr_type_error import (
     UnknownPsrTypeError,
 )
 

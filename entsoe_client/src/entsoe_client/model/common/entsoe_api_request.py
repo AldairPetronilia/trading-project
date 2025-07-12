@@ -1,21 +1,21 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
-from src.entsoe_client.exceptions.entsoe_api_request_error import EntsoEApiRequestError
-from src.entsoe_client.model.common.area_code import AreaCode
-from src.entsoe_client.model.common.area_type import AreaType
-from src.entsoe_client.model.common.auction_category import AuctionCategory
-from src.entsoe_client.model.common.auction_type import AuctionType
-from src.entsoe_client.model.common.business_type import BusinessType
-from src.entsoe_client.model.common.contract_market_agreement_type import (
+from entsoe_client.exceptions.entsoe_api_request_error import EntsoEApiRequestError
+from entsoe_client.model.common.area_code import AreaCode
+from entsoe_client.model.common.area_type import AreaType
+from entsoe_client.model.common.auction_category import AuctionCategory
+from entsoe_client.model.common.auction_type import AuctionType
+from entsoe_client.model.common.business_type import BusinessType
+from entsoe_client.model.common.contract_market_agreement_type import (
     ContractMarketAgreementType,
 )
-from src.entsoe_client.model.common.direction import Direction
-from src.entsoe_client.model.common.doc_status import DocStatus
-from src.entsoe_client.model.common.document_type import DocumentType
-from src.entsoe_client.model.common.process_type import ProcessType
-from src.entsoe_client.model.common.psr_type import PsrType
+from entsoe_client.model.common.direction import Direction
+from entsoe_client.model.common.doc_status import DocStatus
+from entsoe_client.model.common.document_type import DocumentType
+from entsoe_client.model.common.process_type import ProcessType
+from entsoe_client.model.common.psr_type import PsrType
 
 
 @dataclass
