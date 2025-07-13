@@ -18,8 +18,12 @@ from entsoe_client.model.common.process_type import ProcessType
 from entsoe_client.model.common.psr_type import PsrType
 
 
-@dataclass
+@dataclass(frozen=True)
 class EntsoEApiRequest:
+    _DOCUMENT_TYPE_REQUIRED = "document_type"
+    _PERIOD_START_REQUIRED = "period_start"
+    _PERIOD_END_REQUIRED = "period_end"
+
     document_type: DocumentType
     period_start: datetime
     period_end: datetime
@@ -51,19 +55,33 @@ class EntsoEApiRequest:
     implementation_date_and_or_time: str | None = None
     update_date_and_or_time: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.document_type is None:
+            raise EntsoEApiRequestError.required_field_missing(
+                self._DOCUMENT_TYPE_REQUIRED,
+            )
+        if self.period_start is None:
+            raise EntsoEApiRequestError.required_field_missing(
+                self._PERIOD_START_REQUIRED,
+            )
+        if self.period_end is None:
+            raise EntsoEApiRequestError.required_field_missing(
+                self._PERIOD_END_REQUIRED,
+            )
+
     def to_parameter_map(self) -> dict[str, str]:
         params = {
             "documentType": self.document_type.code,
-            "periodStart": self.period_start.strftime("%Y%m%d%H%M"),
-            "periodEnd": self.period_end.strftime("%Y%m%d%H%M"),
+            "periodStart": self._format_datetime(self.period_start),
+            "periodEnd": self._format_datetime(self.period_end),
         }
 
         def _add_if_not_none(key: str, value: Any) -> None:
             if value is not None:
-                if hasattr(value, "code"):
-                    params[key] = value.code
+                if hasattr(value, "code") or hasattr(value, "value"):
+                    params[key] = self._get_enum_code(value)
                 elif isinstance(value, datetime):
-                    params[key] = value.strftime("%Y%m%d%H%M")
+                    params[key] = self._format_datetime(value)
                 else:
                     params[key] = str(value)
 
@@ -106,6 +124,16 @@ class EntsoEApiRequest:
 
         return params
 
+    def _format_datetime(self, dt: datetime) -> str:
+        return dt.strftime("%Y%m%d%H%M")
+
+    def _get_enum_code(self, enum_value: Any) -> str:
+        if hasattr(enum_value, "code"):
+            return enum_value.code
+        if hasattr(enum_value, "value"):
+            return enum_value.value
+        return str(enum_value)
+
     def validate_domain_parameters(self) -> None:
         self._validate_area_type(
             self.bidding_zone_domain,
@@ -130,7 +158,7 @@ class EntsoEApiRequest:
         parameter_name: str,
     ) -> None:
         if area_code and not area_code.has_area_type(required_type):
-            raise EntsoEApiRequestError(
+            raise EntsoEApiRequestError.invalid_area_type(
                 area_code=area_code,
                 required_type=required_type,
                 parameter_name=parameter_name,
