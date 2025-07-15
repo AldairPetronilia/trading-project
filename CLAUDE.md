@@ -43,13 +43,15 @@ uv run pytest                           # Run all tests in workspace
 # Run specific test file
 uv run pytest entsoe_client/tests/entsoe_client/client/test_default_entsoe_client_integration.py
 
-# Type checking
-uv run mypy .
+# Code quality (RECOMMENDED: use pre-commit instead of individual commands)
+pre-commit run --all-files              # Run all quality checks
+pre-commit run                          # Run on staged files only
 
-# Linting and formatting
-uv run ruff check
-uv run ruff format
-uv run black .
+# Individual quality tools (alternative to pre-commit)
+uv run mypy .                           # Type checking
+uv run ruff check                       # Linting
+uv run ruff format                      # Ruff formatting
+uv run black .                          # Black formatting
 
 # Run specific Python service
 uv run python energy_data_service/app/main.py
@@ -79,6 +81,27 @@ cd energy-data-service
 - **Python**: Configured with ruff, black, mypy, and pre-commit hooks
 - **Java**: Uses Spotless with Google Java Format for consistent styling
 - **Type Safety**: mypy for Python with strict configuration, full type annotations required
+
+### Pre-commit Hooks (Recommended)
+The project uses pre-commit hooks to ensure code quality. **Use `pre-commit run --all-files` instead of running individual tools** like mypy and ruff separately.
+
+Configured hooks:
+- **black**: Code formatting with 88 character line length
+- **ruff**: Linting with auto-fix enabled
+- **ruff-format**: Additional formatting checks
+- **mypy**: Type checking with strict configuration
+- **Standard hooks**: trailing-whitespace, end-of-file-fixer, check-yaml, etc.
+
+```bash
+# Install pre-commit hooks (run once)
+pre-commit install
+
+# Run all quality checks on all files (preferred method)
+pre-commit run --all-files
+
+# Run pre-commit on staged files only
+pre-commit run
+```
 
 ### Important ruff Rules
 - `SIM117`: Combine nested `with` statements instead of nesting them
