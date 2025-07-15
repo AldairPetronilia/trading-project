@@ -4,8 +4,8 @@ from datetime import datetime
 from entsoe_client.api.load_domain_request_builder import LoadDomainRequestBuilder
 from entsoe_client.client.entsoe_client import EntsoEClient
 from entsoe_client.client.entsoe_client_error import EntsoEClientError
-from entsoe_client.http.exceptions import HttpClientError
-from entsoe_client.http.http_client import HttpClient
+from entsoe_client.http_client.exceptions import HttpClientError
+from entsoe_client.http_client.http_client import HttpClient
 from entsoe_client.model.common.area_code import AreaCode
 from entsoe_client.model.common.entsoe_api_request import EntsoEApiRequest
 from entsoe_client.model.load.gl_market_document import GlMarketDocument

@@ -12,7 +12,7 @@ from tenacity import (
 )
 
 from entsoe_client.config.settings import RetryConfig
-from entsoe_client.http.exceptions import (
+from entsoe_client.http_client.exceptions import (
     HttpClientConnectionError,
     HttpClientError,
     HttpClientRetryError,

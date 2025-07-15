@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from entsoe_client.config.settings import RetryConfig
-from entsoe_client.http.exceptions import (
+from entsoe_client.http_client.exceptions import (
     HttpClientConnectionError,
     HttpClientError,
     HttpClientRetryError,
     HttpClientTimeoutError,
 )
-from entsoe_client.http.retry_handler import RetryHandler
+from entsoe_client.http_client.retry_handler import RetryHandler
 
 
 class TestRetryHandler:

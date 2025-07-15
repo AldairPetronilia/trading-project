@@ -8,14 +8,14 @@ import httpx
 from pydantic import HttpUrl
 
 from entsoe_client.config.settings import EntsoEClientConfig
-from entsoe_client.http.exceptions import (
+from entsoe_client.http_client.exceptions import (
     HttpClientConnectionError,
     HttpClientError,
     HttpClientRetryError,
     HttpClientTimeoutError,
 )
-from entsoe_client.http.http_client import HttpClient
-from entsoe_client.http.retry_handler import RetryHandler
+from entsoe_client.http_client.http_client import HttpClient
+from entsoe_client.http_client.retry_handler import RetryHandler
 
 logger = logging.getLogger(__name__)
 

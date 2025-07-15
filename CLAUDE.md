@@ -21,6 +21,9 @@ This is a multi-language trading project focused on ENTSO-E (European Network of
    - Pydantic models with XML support via pydantic-xml
    - Type-safe data structures and validation
    - Part of uv workspace configuration
+   - Clean architecture with dependency injection using `dependency-injector`
+   - Comprehensive exception hierarchy for domain-specific errors
+   - HTTP client abstraction with retry handling using tenacity
 
 4. **energy_data_service/** - Python data service (Python 3.13+)
    - Async HTTP client using aiohttp
@@ -35,6 +38,10 @@ uv sync
 
 # Run Python tests (requires pytest-asyncio for async tests)
 uv run pytest entsoe_client/tests/
+uv run pytest                           # Run all tests in workspace
+
+# Run specific test file
+uv run pytest entsoe_client/tests/entsoe_client/client/test_default_entsoe_client_integration.py
 
 # Type checking
 uv run mypy .
@@ -120,3 +127,25 @@ cd energy-data-service
 - **tenacity**: Async retry library for robust HTTP request handling
 - **types-pytest**: Type stubs for pytest to satisfy mypy strict typing
 - **pytest-asyncio**: Plugin for async test support with proper event loop handling
+
+## Working Directory Context
+
+When working in the `entsoe_client/` directory, you're in the Python client library workspace member. This directory contains:
+
+- **Source code**: `src/entsoe_client/` - Main implementation
+- **Tests**: `tests/` - Test suite with integration tests
+- **Configuration**: `pyproject.toml` - Project dependencies and metadata
+
+Key files for understanding the architecture:
+- `src/entsoe_client/container.py` - Dependency injection container setup
+- `src/entsoe_client/config/settings.py` - Configuration with Pydantic Settings
+- `src/entsoe_client/client/default_entsoe_client.py` - Main client implementation
+- `src/entsoe_client/http/httpx_client.py` - HTTP client with retry handling
+- `tests/entsoe_client/client/test_default_entsoe_client_integration.py` - Integration tests
+
+## Important Configuration Files
+
+- **Root `pyproject.toml`**: Defines uv workspace and dev dependencies
+- **`ruff.toml`**: Comprehensive linting rules with per-file ignores
+- **`mypy.ini`**: Strict type checking configuration
+- **Individual `pyproject.toml`**: Component-specific dependencies

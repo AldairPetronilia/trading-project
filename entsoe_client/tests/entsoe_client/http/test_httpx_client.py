@@ -11,14 +11,14 @@ import pytest
 from pydantic import HttpUrl, SecretStr
 
 from entsoe_client.config.settings import EntsoEClientConfig, HttpConfig, RetryConfig
-from entsoe_client.http.exceptions import (
+from entsoe_client.http_client.exceptions import (
     HttpClientConnectionError,
     HttpClientError,
     HttpClientRetryError,
     HttpClientTimeoutError,
 )
-from entsoe_client.http.httpx_client import HttpxClient
-from entsoe_client.http.retry_handler import RetryHandler
+from entsoe_client.http_client.httpx_client import HttpxClient
+from entsoe_client.http_client.retry_handler import RetryHandler
 
 
 class TestHttpxClient:
