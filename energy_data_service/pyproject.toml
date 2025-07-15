@@ -1,0 +1,12 @@
+[project]
+name = "energy-data-service"
+version = "0.1.0"
+description = "Professional data service for energy trading signals"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "entsoe-client",
+]
+
+[tool.uv.sources]
+entsoe-client = { workspace = true }
