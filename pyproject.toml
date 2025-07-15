@@ -21,4 +21,5 @@ build-backend = "hatchling.build"
 [tool.uv.workspace]
 members = [
     "entsoe_client",
+    "energy_data_service",
 ]
