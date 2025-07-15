@@ -1,32 +1,40 @@
 """Integration test for DefaultEntsoEClient against real ENTSO-E API."""
 
+import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
 
-import entsoe_client
-from entsoe_client.client.default_entsoe_client import DefaultEntsoEClient
+from entsoe_client.client.entsoe_client import EntsoEClient
+from entsoe_client.client.entsoe_client_factory import EntsoEClientFactory
 from entsoe_client.model.common.area_code import AreaCode
 from entsoe_client.model.load.gl_market_document import GlMarketDocument
 
 
+@pytest_asyncio.fixture
+async def client() -> EntsoEClient:
+    """
+    Create a client instance for integration testing.
+    This fixture creates a client using the EntsoEClientFactory, which is the
+    public entry point of the library. It requires the ENTSOE_API_TOKEN
+    environment variable to be set. If the token is not available, all
+    tests using this fixture will be skipped.
+    The client is properly closed after the test completes.
+    """
+    api_token = os.environ.get("ENTSOE_API_TOKEN")
+    if not api_token:
+        pytest.skip(
+            "Skipping integration tests: ENTSOE_API_TOKEN environment variable not set.",
+        )
+
+    client_instance = EntsoEClientFactory.create_client(api_token)
+    yield client_instance
+    await client_instance.close()
+
+
 class TestDefaultEntsoEClientIntegration:
     """Integration tests for DefaultEntsoEClient against real ENTSO-E API."""
-
-    @pytest_asyncio.fixture
-    async def client(self) -> DefaultEntsoEClient:
-        """Create a client instance for testing."""
-        try:
-            config = entsoe_client.container.config()
-            http_client = entsoe_client.container.http_client()
-            return DefaultEntsoEClient(http_client, str(config.base_url))
-        except Exception as e:
-            pytest.skip(
-                f"Could not create client from container (likely missing API token): {e}",
-            )
-            # This return is unreachable due to pytest.skip() but satisfies mypy
-            raise
 
     def _get_test_periods(self) -> tuple[datetime, datetime]:
         """Get test period - yesterday for actual data, tomorrow for forecasts."""
@@ -85,125 +93,101 @@ class TestDefaultEntsoEClientIntegration:
     @pytest.mark.asyncio
     async def test_get_actual_total_load_real_api(
         self,
-        client: DefaultEntsoEClient,
+        client: EntsoEClient,
     ) -> None:
         """Test actual total load retrieval against real ENTSO-E API."""
-        try:
-            bidding_zone = AreaCode.CZECH_REPUBLIC
-            period_start, period_end = self._get_test_periods()
+        bidding_zone = AreaCode.CZECH_REPUBLIC
+        period_start, period_end = self._get_test_periods()
 
-            result = await client.get_actual_total_load(
-                bidding_zone=bidding_zone,
-                period_start=period_start,
-                period_end=period_end,
-            )
+        result = await client.get_actual_total_load(
+            bidding_zone=bidding_zone,
+            period_start=period_start,
+            period_end=period_end,
+        )
 
-            self._validate_market_document(result)
-
-        finally:
-            await client.close()
+        self._validate_market_document(result)
 
     @pytest.mark.asyncio
     async def test_get_day_ahead_load_forecast_real_api(
         self,
-        client: DefaultEntsoEClient,
+        client: EntsoEClient,
     ) -> None:
         """Test day-ahead load forecast retrieval against real ENTSO-E API."""
-        try:
-            bidding_zone = AreaCode.CZECH_REPUBLIC
-            period_start, period_end = self._get_forecast_periods()
+        bidding_zone = AreaCode.CZECH_REPUBLIC
+        period_start, period_end = self._get_forecast_periods()
 
-            result = await client.get_day_ahead_load_forecast(
-                bidding_zone=bidding_zone,
-                period_start=period_start,
-                period_end=period_end,
-            )
+        result = await client.get_day_ahead_load_forecast(
+            bidding_zone=bidding_zone,
+            period_start=period_start,
+            period_end=period_end,
+        )
 
-            self._validate_market_document(result)
-
-        finally:
-            await client.close()
+        self._validate_market_document(result)
 
     @pytest.mark.asyncio
     async def test_get_week_ahead_load_forecast_real_api(
         self,
-        client: DefaultEntsoEClient,
+        client: EntsoEClient,
     ) -> None:
         """Test week-ahead load forecast retrieval against real ENTSO-E API."""
-        try:
-            bidding_zone = AreaCode.CZECH_REPUBLIC
-            period_start, period_end = self._get_forecast_periods()
+        bidding_zone = AreaCode.CZECH_REPUBLIC
+        period_start, period_end = self._get_forecast_periods()
 
-            result = await client.get_week_ahead_load_forecast(
-                bidding_zone=bidding_zone,
-                period_start=period_start,
-                period_end=period_end,
-            )
+        result = await client.get_week_ahead_load_forecast(
+            bidding_zone=bidding_zone,
+            period_start=period_start,
+            period_end=period_end,
+        )
 
-            self._validate_market_document(result)
-
-        finally:
-            await client.close()
+        self._validate_market_document(result)
 
     @pytest.mark.asyncio
     async def test_get_month_ahead_load_forecast_real_api(
         self,
-        client: DefaultEntsoEClient,
+        client: EntsoEClient,
     ) -> None:
         """Test month-ahead load forecast retrieval against real ENTSO-E API."""
-        try:
-            bidding_zone = AreaCode.CZECH_REPUBLIC
-            period_start, period_end = self._get_forecast_periods()
+        bidding_zone = AreaCode.CZECH_REPUBLIC
+        period_start, period_end = self._get_forecast_periods()
 
-            result = await client.get_month_ahead_load_forecast(
-                bidding_zone=bidding_zone,
-                period_start=period_start,
-                period_end=period_end,
-            )
+        result = await client.get_month_ahead_load_forecast(
+            bidding_zone=bidding_zone,
+            period_start=period_start,
+            period_end=period_end,
+        )
 
-            self._validate_market_document(result)
-
-        finally:
-            await client.close()
+        self._validate_market_document(result)
 
     @pytest.mark.asyncio
     async def test_get_year_ahead_load_forecast_real_api(
         self,
-        client: DefaultEntsoEClient,
+        client: EntsoEClient,
     ) -> None:
         """Test year-ahead load forecast retrieval against real ENTSO-E API."""
-        try:
-            bidding_zone = AreaCode.CZECH_REPUBLIC
-            period_start, period_end = self._get_forecast_periods()
+        bidding_zone = AreaCode.CZECH_REPUBLIC
+        period_start, period_end = self._get_forecast_periods()
 
-            result = await client.get_year_ahead_load_forecast(
-                bidding_zone=bidding_zone,
-                period_start=period_start,
-                period_end=period_end,
-            )
+        result = await client.get_year_ahead_load_forecast(
+            bidding_zone=bidding_zone,
+            period_start=period_start,
+            period_end=period_end,
+        )
 
-            self._validate_market_document(result)
-
-        finally:
-            await client.close()
+        self._validate_market_document(result)
 
     @pytest.mark.asyncio
     async def test_get_year_ahead_forecast_margin_real_api(
         self,
-        client: DefaultEntsoEClient,
+        client: EntsoEClient,
     ) -> None:
         """Test year-ahead forecast margin retrieval against real ENTSO-E API."""
-        try:
-            bidding_zone = AreaCode.CZECH_REPUBLIC
-            period_start, period_end = self._get_forecast_periods()
+        bidding_zone = AreaCode.CZECH_REPUBLIC
+        period_start, period_end = self._get_forecast_periods()
 
-            result = await client.get_year_ahead_forecast_margin(
-                bidding_zone=bidding_zone,
-                period_start=period_start,
-                period_end=period_end,
-            )
+        result = await client.get_year_ahead_forecast_margin(
+            bidding_zone=bidding_zone,
+            period_start=period_start,
+            period_end=period_end,
+        )
 
-            self._validate_market_document(result)
-
-        finally:
-            await client.close()
+        self._validate_market_document(result)
