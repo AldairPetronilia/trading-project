@@ -12,21 +12,25 @@ from entsoe_client.config.settings import EntsoEClientConfig, load_config
 
 class TestEntsoEClientConfig:
     def test_config_requires_api_token(self) -> None:
-        with pytest.raises(ValidationError) as exc_info:
-            EntsoEClientConfig()
+        # Clear environment and disable .env file loading for this test
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ValidationError) as exc_info:
+                EntsoEClientConfig(_env_file=None)
 
-        errors = exc_info.value.errors()
-        assert len(errors) == 1
-        assert errors[0]["type"] == "missing"
-        assert errors[0]["loc"] == ("api_token",)
+            errors = exc_info.value.errors()
+            assert len(errors) == 1
+            assert errors[0]["type"] == "missing"
+            assert errors[0]["loc"] == ("api_token",)
 
     def test_config_with_valid_api_token(self) -> None:
-        config = EntsoEClientConfig(api_token="test-token-123")
+        # Clear environment and disable .env file loading for this test
+        with patch.dict(os.environ, {}, clear=True):
+            config = EntsoEClientConfig(api_token="test-token-123", _env_file=None)
 
-        assert config.api_token.get_secret_value() == "test-token-123"
-        assert str(config.base_url) == "https://web-api.tp.entsoe.eu/api"
-        assert config.environment == "production"
-        assert config.debug is False
+            assert config.api_token.get_secret_value() == "test-token-123"
+            assert str(config.base_url) == "https://web-api.tp.entsoe.eu/api"
+            assert config.environment == "production"
+            assert config.debug is False
 
     def test_api_token_validation_too_short(self) -> None:
         with pytest.raises(ValidationError) as exc_info:

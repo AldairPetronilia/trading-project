@@ -90,7 +90,7 @@ class LoggingConfig(BaseModel):
 class EntsoEClientConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="ENTSOE_",
-        env_file=".env",
+        env_file=Path(__file__).parent.parent / ".env",
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         case_sensitive=False,

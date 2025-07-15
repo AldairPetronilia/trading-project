@@ -428,12 +428,18 @@ class AreaCode(Enum):
         except UnknownAreaCodeError:
             return None
 
+    def _safe_area_type_from_code(self, code: str) -> AreaType | None:
+        try:
+            return AreaType[code]
+        except KeyError:
+            return None
+
     def get_area_types_list(self) -> list[AreaType]:
         return list(
             filter(
                 lambda x: x is not None,  # type: ignore[arg-type]
                 map(
-                    self._safe_from_code,
+                    self._safe_area_type_from_code,
                     {
                         part.split("|")[0]
                         for part in self.area_types.split(", ")
