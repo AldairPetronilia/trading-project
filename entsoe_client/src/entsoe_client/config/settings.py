@@ -23,6 +23,14 @@ class HttpConfig(BaseModel):
         default=timedelta(seconds=60),
         description="HTTP read timeout",
     )
+    write_timeout: timedelta = Field(
+        default=timedelta(seconds=60),
+        description="HTTP write timeout",
+    )
+    pool_timeout: timedelta = Field(
+        default=timedelta(seconds=30),
+        description="Timeout to acquire connection from pool",
+    )
     max_connections: int = Field(
         default=100,
         ge=1,

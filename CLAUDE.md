@@ -33,7 +33,7 @@ This is a multi-language trading project focused on ENTSO-E (European Network of
 # Install dependencies for all workspace members
 uv sync
 
-# Run Python tests
+# Run Python tests (requires pytest-asyncio for async tests)
 uv run pytest entsoe_client/tests/
 
 # Type checking
@@ -73,6 +73,17 @@ cd energy-data-service
 - **Java**: Uses Spotless with Google Java Format for consistent styling
 - **Type Safety**: mypy for Python with strict configuration, full type annotations required
 
+### Important ruff Rules
+- `SIM117`: Combine nested `with` statements instead of nesting them
+- `B904`: Use `raise ... from err` for exception chaining to preserve context
+- `TRY003`: Avoid long exception messages, keep them concise
+- `EM101`: Don't use string literals directly in exceptions, assign to variable first
+
+### mypy Configuration
+- Global configuration in `mypy.ini` with strict typing enabled
+- Test-specific overrides: `[mypy-tests.*]` section allows `disallow_untyped_decorators = false`
+- Untyped decorator warnings from pytest fixtures are handled via configuration
+
 ## Key Patterns
 
 ### Java Components
@@ -86,6 +97,9 @@ cd energy-data-service
 - Type hints required for all functions and methods
 - Async/await patterns in data service components
 - Custom exception hierarchy for domain-specific errors
+- **Dependency injection**: Using `dependency-injector` library with Factory providers
+- **Error handling**: Exception chaining with `raise ... from e` to preserve context
+- **HTTP client architecture**: Abstract base classes with proper async patterns
 
 ## Testing
 
@@ -93,3 +107,16 @@ cd energy-data-service
 - **Python**: pytest for all testing needs
 - Integration tests exist for ENTSO-E API interactions
 - Test data includes XML samples in `entsoe-client/src/test/resources/loadXmls/`
+
+### Python Testing Best Practices
+- **pytest-asyncio**: Required for testing async functions with `@pytest.mark.asyncio`
+- **Async mocking**: Use `AsyncMock` for async operations, `patch()` for external dependencies
+- **Test fixtures**: Use `@pytest.fixture` for reusable test setup and dependency injection
+- **Exception testing**: Use `pytest.raises()` to verify expected exceptions are raised
+- **Context managers**: Use `with patch(), pytest.raises():` instead of nested `with` statements
+- **Return type annotations**: All test methods should have `-> None` return type annotation
+
+### Key Testing Dependencies
+- **tenacity**: Async retry library for robust HTTP request handling
+- **types-pytest**: Type stubs for pytest to satisfy mypy strict typing
+- **pytest-asyncio**: Plugin for async test support with proper event loop handling
