@@ -46,7 +46,7 @@ class TestAreaCodeSafeFromCode:
 class TestAreaCodeCountryCode:
     """Test the get_country_code method."""
 
-    @pytest.mark.parametrize(  # type: ignore[misc]
+    @pytest.mark.parametrize(
         ("area_code", "expected_country"),
         [
             (AreaCode.FRANCE, "FR"),
@@ -72,7 +72,7 @@ class TestAreaCodeCountryCode:
         """Test country code extraction for various area codes."""
         assert area_code.get_country_code() == expected_country
 
-    @pytest.mark.parametrize(  # type: ignore[misc]
+    @pytest.mark.parametrize(
         "area_code",
         [
             AreaCode.NORDIC,  # No country code in regional area

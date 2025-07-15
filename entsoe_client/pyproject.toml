@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.10.1",
     "pydantic-xml>=2.17.2",
     "dependency-injector>=4.41.0",
+    "tenacity>=9.0.0",
 ]
 
 [build-system]
@@ -22,4 +23,5 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
 ]
