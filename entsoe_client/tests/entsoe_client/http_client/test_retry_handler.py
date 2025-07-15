@@ -155,7 +155,7 @@ class TestRetryHandler:
 
         with (
             patch("asyncio.sleep", new_callable=AsyncMock),
-            patch("entsoe_client.http.retry_handler.logger"),
+            patch("entsoe_client.http_client.retry_handler.logger"),
         ):
             result = await retry_handler.execute(mock_operation)
 

@@ -145,7 +145,7 @@ class TestHttpxClient:
             )
 
             assert result == "<xml>response</xml>"
-            mock_retry_handler.execute.assert_called_once()  # type: ignore[attr-defined]
+            mock_retry_handler.execute.assert_called_once()
             mock_client.get.assert_called_once()
 
     @pytest.mark.asyncio
@@ -221,7 +221,7 @@ class TestHttpxClient:
             async def execute_mock(func: Callable[[], Awaitable[Any]]) -> Any:
                 return await func()
 
-            mock_retry_handler.execute.side_effect = execute_mock  # type: ignore[attr-defined]
+            mock_retry_handler.execute.side_effect = execute_mock
 
             with pytest.raises(HttpClientRetryError) as exc_info:
                 await httpx_client.get(HttpUrl("https://api.example.com/data"))
@@ -249,7 +249,7 @@ class TestHttpxClient:
             async def execute_mock(func: Callable[[], Awaitable[Any]]) -> Any:
                 return await func()
 
-            mock_retry_handler.execute.side_effect = execute_mock  # type: ignore[attr-defined]
+            mock_retry_handler.execute.side_effect = execute_mock
 
             with pytest.raises(HttpClientError) as exc_info:
                 await httpx_client.get(HttpUrl("https://api.example.com/data"))
@@ -273,7 +273,7 @@ class TestHttpxClient:
             async def execute_mock(func: Callable[[], Awaitable[Any]]) -> Any:
                 return await func()
 
-            mock_retry_handler.execute.side_effect = execute_mock  # type: ignore[attr-defined]
+            mock_retry_handler.execute.side_effect = execute_mock
 
             with pytest.raises(HttpClientTimeoutError) as exc_info:
                 await httpx_client.get(HttpUrl("https://api.example.com/data"))
@@ -296,7 +296,7 @@ class TestHttpxClient:
             async def execute_mock(func: Callable[[], Awaitable[Any]]) -> Any:
                 return await func()
 
-            mock_retry_handler.execute.side_effect = execute_mock  # type: ignore[attr-defined]
+            mock_retry_handler.execute.side_effect = execute_mock
 
             with pytest.raises(HttpClientConnectionError) as exc_info:
                 await httpx_client.get(HttpUrl("https://api.example.com/data"))
@@ -317,7 +317,7 @@ class TestHttpxClient:
             async def execute_mock(func: Callable[[], Awaitable[Any]]) -> Any:
                 return await func()
 
-            mock_retry_handler.execute.side_effect = execute_mock  # type: ignore[attr-defined]
+            mock_retry_handler.execute.side_effect = execute_mock
 
             with pytest.raises(HttpClientError) as exc_info:
                 await httpx_client.get(HttpUrl("https://api.example.com/data"))
@@ -443,7 +443,7 @@ class TestHttpxClient:
             async def execute_mock(func: Callable[[], Awaitable[Any]]) -> Any:
                 return await func()
 
-            mock_retry_handler.execute.side_effect = execute_mock  # type: ignore[attr-defined]
+            mock_retry_handler.execute.side_effect = execute_mock
 
             with pytest.raises(HttpClientError) as exc_info:
                 await httpx_client.get(HttpUrl("https://api.example.com/data"))
@@ -466,7 +466,7 @@ class TestHttpxClient:
             async def execute_mock(func: Callable[[], Awaitable[Any]]) -> Any:
                 return await func()
 
-            mock_retry_handler.execute.side_effect = execute_mock  # type: ignore[attr-defined]
+            mock_retry_handler.execute.side_effect = execute_mock
 
             with pytest.raises(HttpClientError) as exc_info:
                 await httpx_client.get(HttpUrl("https://api.example.com/data"))
