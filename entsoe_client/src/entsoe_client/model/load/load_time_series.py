@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 from pydantic import field_serializer, field_validator
 from pydantic_xml import BaseXmlModel, element
 
@@ -7,8 +5,8 @@ from entsoe_client.model import ENTSOE_NSMAP
 from entsoe_client.model.common.business_type import BusinessType
 from entsoe_client.model.common.curve_type import CurveType
 from entsoe_client.model.common.domain_mrid import DomainMRID
+from entsoe_client.model.common.object_aggregation import ObjectAggregation
 from entsoe_client.model.load.load_period import LoadPeriod
-from entsoe_client.model.load.object_aggregation import ObjectAggregation
 
 
 class LoadTimeSeries(BaseXmlModel, tag="TimeSeries", nsmap=ENTSOE_NSMAP):  # type: ignore[call-arg]
