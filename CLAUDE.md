@@ -66,6 +66,9 @@ uv run black .                          # Black formatting
 
 # Run specific Python service
 uv run python energy_data_service/app/main.py
+
+# IMPORTANT: Always use 'uv run python' instead of 'python' directly
+# This ensures proper virtual environment and dependency resolution
 ```
 
 ### Energy Data Service Commands
@@ -207,3 +210,24 @@ The project uses **TimescaleDB** (PostgreSQL extension) for time-series data sto
 - **`ruff.toml`**: Comprehensive linting rules with per-file ignores
 - **`mypy.ini`**: Strict type checking configuration
 - **Individual `pyproject.toml`**: Component-specific dependencies
+
+## Development Best Practices
+
+### Command Usage
+- **ALWAYS use `uv run python` instead of `python` directly**
+  - This ensures proper virtual environment and dependency resolution
+  - Examples: `uv run python debug_script.py`, `uv run python -m pytest`
+  - Common mistake: Running `python script.py` can lead to import errors or wrong dependencies
+
+### Debugging Techniques
+- **Create temporary debugging files** to understand complex behavior
+  - Example: Create `debug_paths.py` to check file path resolution
+  - Example: Create `debug_config.py` to test configuration loading
+  - Example: Create `debug_nested.py` to understand nested object behavior
+- **Use debugging scripts to:**
+  - Verify file paths and existence
+  - Test configuration loading with different scenarios
+  - Understand how libraries behave in practice vs. documentation
+  - Debug complex data structures and nested objects
+- **Clean up debugging files** after use to keep repository clean
+- **Document findings** in comments or CLAUDE.md for future reference

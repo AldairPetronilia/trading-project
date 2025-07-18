@@ -21,22 +21,8 @@ MIN_API_TOKEN_LENGTH = 10
 REDACTED_VALUE = "***REDACTED***"
 
 
-def get_base_config(env_prefix: str) -> SettingsConfigDict:
-    return SettingsConfigDict(
-        env_prefix=env_prefix,
-        env_file=Path(__file__).parent.parent / ".env",
-        env_file_encoding="utf-8",
-        env_nested_delimiter="__",
-        case_sensitive=False,
-        extra="forbid",
-        validate_assignment=True,
-    )
-
-
-class DatabaseConfig(BaseSettings):
+class DatabaseConfig(BaseModel):
     """Database configuration settings."""
-
-    model_config = get_base_config("DB_")
 
     host: str = Field(default="localhost", description="The database host address")
     port: int = Field(default=5432, description="The database port number")
@@ -80,10 +66,8 @@ class HttpConfig(BaseModel):
     )
 
 
-class EntsoEClientConfig(BaseSettings):
+class EntsoEClientConfig(BaseModel):
     """ENTSO-E client configuration settings."""
-
-    model_config = get_base_config("ENTSOE_")
 
     api_token: SecretStr = Field(description="ENTSO-E API token for authentication")
     base_url: HttpUrl = Field(
@@ -104,10 +88,8 @@ class EntsoEClientConfig(BaseSettings):
         return v
 
 
-class LoggingConfig(BaseSettings):
+class LoggingConfig(BaseModel):
     """Logging configuration settings."""
-
-    model_config = get_base_config("LOG_")
 
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",
@@ -125,7 +107,13 @@ class LoggingConfig(BaseSettings):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).parent.parent / ".env",  # Project root
+        env_file=Path(__file__).parent.parent.parent
+        / ".env",  # energy_data_service root
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
+        case_sensitive=False,
+        extra="ignore",
+        validate_assignment=True,
     )
 
     # Application settings
@@ -177,6 +165,9 @@ class Settings(BaseSettings):
         data = self.model_dump()
         if "database" in data and "password" in data["database"]:
             data["database"]["password"] = REDACTED_VALUE
+            # Remove the computed URL field that contains the password
+            if "url" in data["database"]:
+                del data["database"]["url"]
         if "entsoe_client" in data and "api_token" in data["entsoe_client"]:
             data["entsoe_client"]["api_token"] = REDACTED_VALUE
         return data
