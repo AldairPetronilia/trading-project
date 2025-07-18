@@ -4,20 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Architecture
 
-This is a multi-language trading project focused on ENTSO-E (European Network of Transmission System Operators for Electricity) data collection and processing. The repository contains three main components:
+This is a Python-based trading project focused on ENTSO-E (European Network of Transmission System Operators for Electricity) data collection and processing. The repository contains two main components:
 
 ### Components
 
-1. **entsoe-client/** - Java 21 client library for ENTSO-E API
-   - Clean architecture with manual dependency injection
-   - Uses Lombok, JAXB for XML parsing, SLF4J for logging
-   - Emphasizes immutability and clean code principles
-
-2. **energy-data-service/** - Spring Boot web service (Java 24)
-   - HTTP client configuration and API endpoints
-   - Uses Spring Boot, Lombok, Jakarta validation
-
-3. **entsoe_client/** - Python client library (Python 3.13+)
+1. **entsoe_client/** - Python client library (Python 3.13+)
    - Pydantic models with XML support via pydantic-xml
    - Type-safe data structures and validation
    - Part of uv workspace configuration
@@ -25,9 +16,11 @@ This is a multi-language trading project focused on ENTSO-E (European Network of
    - Comprehensive exception hierarchy for domain-specific errors
    - HTTP client abstraction with retry handling using tenacity
 
-4. **energy_data_service/** - Python data service (Python 3.13+)
-   - Async HTTP client using aiohttp
-   - Data collection and processing pipeline
+2. **energy_data_service/** - Python data service (Python 3.13+)
+   - Professional data service for energy trading signals
+   - Depends on the entsoe_client workspace member
+   - MVP architecture with collectors, processors, and repositories
+   - Designed for GL_MarketDocument processing and time-series data storage
 
 ## Development Commands
 
@@ -57,29 +50,20 @@ uv run black .                          # Black formatting
 uv run python energy_data_service/app/main.py
 ```
 
-### Java Components
+### Energy Data Service Commands
 
-#### ENTSO-E Client (entsoe-client/)
 ```bash
-cd entsoe-client
-./gradlew build
-./gradlew test
-./gradlew spotlessCheck    # Check code formatting
-./gradlew spotlessApply    # Apply code formatting
-```
+# The energy_data_service is currently in early development
+# Check the MVP_ARCHITECTURE.md for planned architecture
+cd energy_data_service
 
-#### Energy Data Service (energy-data-service/)
-```bash
-cd energy-data-service
-./gradlew build
-./gradlew test
-./gradlew bootRun         # Run Spring Boot application
+# Once implemented, it will likely use:
+# uv run python -m energy_data_service.app.main
 ```
 
 ## Code Quality Tools
 
 - **Python**: Configured with ruff, black, mypy, and pre-commit hooks
-- **Java**: Uses Spotless with Google Java Format for consistent styling
 - **Type Safety**: mypy for Python with strict configuration, full type annotations required
 
 ### Pre-commit Hooks (Recommended)
@@ -116,12 +100,6 @@ pre-commit run
 
 ## Key Patterns
 
-### Java Components
-- Constructor-based dependency injection (no DI framework)
-- Immutable data objects using Lombok `@Value`
-- Builder patterns for complex request objects
-- XML processing with JAXB adapters
-
 ### Python Components
 - Pydantic models for data validation and serialization
 - Type hints required for all functions and methods
@@ -133,10 +111,9 @@ pre-commit run
 
 ## Testing
 
-- **Java**: JUnit 5 with Mockito and AssertJ
 - **Python**: pytest for all testing needs
 - Integration tests exist for ENTSO-E API interactions
-- Test data includes XML samples in `entsoe-client/src/test/resources/loadXmls/`
+- Test data includes XML samples and fixtures
 
 ### Python Testing Best Practices
 - **pytest-asyncio**: Required for testing async functions with `@pytest.mark.asyncio`
@@ -153,7 +130,8 @@ pre-commit run
 
 ## Working Directory Context
 
-When working in the `entsoe_client/` directory, you're in the Python client library workspace member. This directory contains:
+### ENTSO-E Client (`entsoe_client/`)
+The Python client library workspace member contains:
 
 - **Source code**: `src/entsoe_client/` - Main implementation
 - **Tests**: `tests/` - Test suite with integration tests
@@ -163,8 +141,16 @@ Key files for understanding the architecture:
 - `src/entsoe_client/container.py` - Dependency injection container setup
 - `src/entsoe_client/config/settings.py` - Configuration with Pydantic Settings
 - `src/entsoe_client/client/default_entsoe_client.py` - Main client implementation
-- `src/entsoe_client/http/httpx_client.py` - HTTP client with retry handling
+- `src/entsoe_client/http_client/httpx_client.py` - HTTP client with retry handling
 - `tests/entsoe_client/client/test_default_entsoe_client_integration.py` - Integration tests
+
+### Energy Data Service (`energy_data_service/`)
+The data service workspace member is in early development:
+
+- **Architecture**: See `MVP_ARCHITECTURE.md` for planned structure
+- **Current state**: Basic project structure with minimal implementation
+- **Dependencies**: Uses `entsoe_client` as a workspace dependency
+- **Future**: Will implement collectors, processors, and repositories for GL_MarketDocument processing
 
 ## Important Configuration Files
 
