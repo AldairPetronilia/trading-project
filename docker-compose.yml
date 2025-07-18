@@ -1,5 +1,36 @@
+version: '3.8'
+
 services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: trading_project_timescaledb
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TIMESCALEDB_TELEMETRY: 'off'
+      POSTGRES_SHARED_PRELOAD_LIBRARIES: 'timescaledb'
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      # Store data in project root for easy access
+      - ./data/timescaledb:/var/lib/postgresql/data
+      # Minimal initialization script
+      - ./scripts/init-db:/docker-entrypoint-initdb.d
+    networks:
+      - trading_project_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   energy-data-service:
     build: energy_data_service
     volumes:
       - "./logs:/app/logs"
+
+networks:
+  trading_project_network:
+    driver: bridge
