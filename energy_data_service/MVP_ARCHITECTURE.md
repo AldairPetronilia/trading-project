@@ -4,6 +4,19 @@
 
 A focused MVP that leverages your existing `entsoe_client` to collect GL_MarketDocument data, process it into database-friendly format, and serve it via REST API. Designed for easy extension to additional data sources.
 
+## Database Infrastructure Status
+
+**✅ Database Ready**: TimescaleDB infrastructure is implemented and operational at the project root level:
+
+- **Location**: `../docker-compose.yml` (project root)
+- **Service**: TimescaleDB running in Docker container
+- **Database**: `energy_data_service` with TimescaleDB extension
+- **Data Storage**: `../data/timescaledb/` (persistent local storage)
+- **Configuration**: `../.env` with database credentials
+- **Initialization**: Minimal setup - only TimescaleDB extension created
+
+**Next Steps**: With database infrastructure ready, the application can now implement the MVP layers starting with configuration and models that will connect to the existing TimescaleDB instance.
+
 ## MVP Repository Structure
 
 ```
@@ -81,9 +94,10 @@ energy_data_service/
 │   ├── __init__.py
 │   ├── init_database.py
 │   └── backfill_historical_data.py  # Critical for initial X years of data
-├── pyproject.toml
+├── pyproject.toml                  # Updated with all MVP dependencies
 ├── alembic.ini
-└── .env.example
+├── .env                            # Local database config and API keys
+└── .env.example                    # Template for energy_data_service config
 ```
 
 ## Core Data Flow

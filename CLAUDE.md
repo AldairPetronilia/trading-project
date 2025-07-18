@@ -24,6 +24,24 @@ This is a Python-based trading project focused on ENTSO-E (European Network of T
 
 ## Development Commands
 
+### Database Infrastructure
+```bash
+# Start TimescaleDB database
+docker-compose up -d timescaledb
+
+# View database logs
+docker-compose logs -f timescaledb
+
+# Connect to database
+docker-compose exec timescaledb psql -U energy_user -d energy_data_service
+
+# Stop database
+docker-compose down
+
+# Check database status
+docker-compose ps
+```
+
 ### Python Components (uv workspace)
 ```bash
 # Install dependencies for all workspace members
@@ -152,9 +170,40 @@ The data service workspace member is in early development:
 - **Dependencies**: Uses `entsoe_client` as a workspace dependency
 - **Future**: Will implement collectors, processors, and repositories for GL_MarketDocument processing
 
+## Database Infrastructure
+
+The project uses **TimescaleDB** (PostgreSQL extension) for time-series data storage:
+
+### Database Configuration
+- **Service**: TimescaleDB running in Docker container
+- **Database**: `energy_data_service`
+- **User**: `energy_user`
+- **Port**: 5432 (mapped to host)
+- **Data Storage**: `./data/timescaledb/` (local bind mount for persistence)
+
+### Database Files
+- **`docker-compose.yml`**: TimescaleDB service configuration with health checks
+- **`.env`**: Database credentials and connection settings
+- **`scripts/init-db/01-init-timescaledb.sql`**: Minimal initialization (TimescaleDB extension only)
+- **`data/`**: Local database storage directory (ignored by git except `.gitkeep`)
+
+### Database Features
+- **Data Persistence**: Survives container restarts via local bind mount
+- **TimescaleDB Extension**: Automatically created on first startup
+- **Health Checks**: Ensures database ready before application starts
+- **Minimal Setup**: Only extension creation in init script - tables created programmatically
+
+### Database Workflow
+1. **Start**: `docker-compose up -d timescaledb`
+2. **Connect**: `docker-compose exec timescaledb psql -U energy_user -d energy_data_service`
+3. **Application**: Creates tables via SQLAlchemy models and Alembic migrations
+4. **Data**: Persists in `./data/timescaledb/` between container restarts
+
 ## Important Configuration Files
 
 - **Root `pyproject.toml`**: Defines uv workspace and dev dependencies
+- **`docker-compose.yml`**: TimescaleDB service and network configuration
+- **`.env`**: Database credentials and application settings
 - **`ruff.toml`**: Comprehensive linting rules with per-file ignores
 - **`mypy.ini`**: Strict type checking configuration
 - **Individual `pyproject.toml`**: Component-specific dependencies
