@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional, Union
 
 from pydantic import field_serializer, field_validator
 from pydantic_xml import BaseXmlModel, element
@@ -7,11 +6,11 @@ from pydantic_xml import BaseXmlModel, element
 from entsoe_client.adapters import date_time_adapter
 from entsoe_client.model import ENTSOE_NSMAP
 from entsoe_client.model.common.document_type import DocumentType
-from entsoe_client.model.common.market_participant_mrid import MarketParticipantMRID
 from entsoe_client.model.common.market_role_type import MarketRoleType
 from entsoe_client.model.common.process_type import ProcessType
 from entsoe_client.model.load.load_time_interval import LoadTimeInterval
 from entsoe_client.model.load.load_time_series import LoadTimeSeries
+from entsoe_client.model.load.market_participant_mrid import MarketParticipantMRID
 
 
 class GlMarketDocument(BaseXmlModel, tag="GL_MarketDocument", nsmap=ENTSOE_NSMAP):  # type: ignore[call-arg]

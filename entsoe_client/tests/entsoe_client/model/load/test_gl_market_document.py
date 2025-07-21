@@ -5,7 +5,6 @@ from entsoe_client.model.common.business_type import BusinessType
 from entsoe_client.model.common.curve_type import CurveType
 from entsoe_client.model.common.document_type import DocumentType
 from entsoe_client.model.common.domain_mrid import DomainMRID
-from entsoe_client.model.common.market_participant_mrid import MarketParticipantMRID
 from entsoe_client.model.common.market_role_type import MarketRoleType
 from entsoe_client.model.common.object_aggregation import ObjectAggregation
 from entsoe_client.model.common.process_type import ProcessType
@@ -14,6 +13,7 @@ from entsoe_client.model.load.load_period import LoadPeriod
 from entsoe_client.model.load.load_point import LoadPoint
 from entsoe_client.model.load.load_time_interval import LoadTimeInterval
 from entsoe_client.model.load.load_time_series import LoadTimeSeries
+from entsoe_client.model.load.market_participant_mrid import MarketParticipantMRID
 
 
 def test_gl_market_document_full_xml_parsing() -> None:
