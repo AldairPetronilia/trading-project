@@ -1,14 +1,13 @@
 from datetime import datetime
-from typing import Optional, Union
 
 from pydantic import field_serializer, field_validator
 from pydantic_xml import BaseXmlModel, element
 
 from entsoe_client.adapters import date_time_adapter
-from entsoe_client.model import ENTSOE_NSMAP
+from entsoe_client.model import ENTSOE_LOAD_NSMAP
 
 
-class LoadTimeInterval(BaseXmlModel, nsmap=ENTSOE_NSMAP):  # type: ignore[call-arg]
+class LoadTimeInterval(BaseXmlModel, nsmap=ENTSOE_LOAD_NSMAP):  # type: ignore[call-arg]
     start: datetime = element(tag="start")
     end: datetime = element(tag="end")
 

@@ -1,13 +1,11 @@
-from typing import Optional, Union
-
 from pydantic import field_serializer, field_validator
 from pydantic_xml import BaseXmlModel, attr
 
-from entsoe_client.model import ENTSOE_NSMAP
+from entsoe_client.model import ENTSOE_LOAD_NSMAP
 from entsoe_client.model.common.area_code import AreaCode
 
 
-class DomainMRID(BaseXmlModel, tag="domain.mRID", nsmap=ENTSOE_NSMAP):  # type: ignore[call-arg]
+class DomainMRID(BaseXmlModel, tag="domain.mRID", nsmap=ENTSOE_LOAD_NSMAP):  # type: ignore[call-arg]
     area_code: AreaCode  # Text content of the element
     coding_scheme: str | None = attr(name="codingScheme", default=None)
 
