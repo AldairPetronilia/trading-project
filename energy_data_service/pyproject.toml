@@ -11,6 +11,7 @@ dependencies = [
     "dependency-injector>=4.48.1",
     "entsoe-client",
     "fastapi>=0.116.1",
+    "greenlet>=3.2.3",
     "pydantic>=2.11.7",
     "pydantic-settings>=2.10.1",
     "sqlalchemy>=2.0.41",
@@ -20,3 +21,10 @@ dependencies = [
 
 [tool.uv.sources]
 entsoe-client = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
+    "testcontainers>=4.12.0",
+]
