@@ -20,3 +20,9 @@ dependencies = [
 
 [tool.uv.sources]
 entsoe-client = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
+]
