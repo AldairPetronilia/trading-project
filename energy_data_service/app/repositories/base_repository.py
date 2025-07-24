@@ -54,8 +54,8 @@ class BaseRepository[ModelType](ABC):
         async with self.database.session_factory() as session:
             try:
                 session.add(model)
-                await session.flush()  # Get any generated IDs
-                await session.refresh(model)  # Refresh with all DB fields
+                await session.flush()
+                await session.refresh(model)
                 await session.commit()
             except IntegrityError as e:
                 await session.rollback()
@@ -203,7 +203,6 @@ class BaseRepository[ModelType](ABC):
             try:
                 session.add_all(models)
                 await session.flush()
-                # Refresh all models to get database-generated fields
                 for model in models:
                     await session.refresh(model)
                 await session.commit()
@@ -269,7 +268,6 @@ class BaseRepository[ModelType](ABC):
 
                 await session.flush()
 
-                # Refresh all models to get latest database state
                 for model in updated_models:
                     await session.refresh(model)
 
@@ -316,5 +314,4 @@ class BaseRepository[ModelType](ABC):
         Returns:
             String representation of the model type
         """
-        # This will be overridden in concrete implementations
         return "Model"

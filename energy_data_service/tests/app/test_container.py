@@ -8,6 +8,7 @@ import pytest
 # Add the app directory to Python path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "app"))
 
+from app.repositories.energy_data_repository import EnergyDataRepository
 from config.database import Database
 from config.settings import Settings
 from container import Container
@@ -24,6 +25,7 @@ class TestContainer:
         assert hasattr(container, "config")
         assert hasattr(container, "database")
         assert hasattr(container, "entsoe_client")
+        assert hasattr(container, "energy_data_repository")
 
     @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
     def test_config_provider_creation(self) -> None:
@@ -88,3 +90,25 @@ class TestContainer:
 
         with pytest.raises(ValueError, match="API token must be at least"):
             container.config()
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_energy_data_repository_provider_creation(self) -> None:
+        """Test that energy data repository provider creates repository instance."""
+        container = Container()
+
+        repository = container.energy_data_repository()
+
+        assert isinstance(repository, EnergyDataRepository)
+        assert repository.database is container.database()
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_repository_dependency_injection(self) -> None:
+        """Test that repository receives proper database dependency."""
+        container = Container()
+
+        # Get instances
+        database = container.database()
+        repository = container.energy_data_repository()
+
+        # Verify repository received the same database instance
+        assert repository.database is database
