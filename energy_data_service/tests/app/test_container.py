@@ -1,0 +1,90 @@
+import os
+import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+# Add the app directory to Python path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "app"))
+
+from config.database import Database
+from config.settings import Settings
+from container import Container
+
+
+class TestContainer:
+    """Test suite for dependency injection container."""
+
+    def test_container_providers_registered(self) -> None:
+        """Test that all providers are properly registered."""
+        container = Container()
+
+        # Check that providers exist
+        assert hasattr(container, "config")
+        assert hasattr(container, "database")
+        assert hasattr(container, "entsoe_client")
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_config_provider_creation(self) -> None:
+        """Test that config provider creates Settings instance."""
+        container = Container()
+
+        settings = container.config()
+
+        assert isinstance(settings, Settings)
+        assert (
+            settings.entsoe_client.api_token.get_secret_value()
+            == "test_token_1234567890"
+        )
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_database_provider_creation(self) -> None:
+        """Test that database provider creates Database instance."""
+        container = Container()
+
+        database = container.database()
+
+        assert isinstance(database, Database)
+        assert (
+            database.config.entsoe_client.api_token.get_secret_value()
+            == "test_token_1234567890"
+        )
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    @patch("app.container.EntsoEClientFactory.create_client")
+    def test_entsoe_client_provider_creation(
+        self,
+        mock_create_client: AsyncMock,
+    ) -> None:
+        """Test that EntsoE client provider calls factory with correct token."""
+        mock_client = AsyncMock()
+        mock_create_client.return_value = mock_client
+
+        container = Container()
+
+        client = container.entsoe_client()
+
+        # Verify factory was called with the secret value
+        mock_create_client.assert_called_once_with("test_token_1234567890")
+        assert client == mock_client
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_container_dependency_injection(self) -> None:
+        """Test that dependencies are properly injected between providers."""
+        container = Container()
+
+        # Get instances
+        settings = container.config()
+        database = container.database()
+
+        # Verify database received the same config instance
+        assert database.config is settings
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "short"})
+    def test_container_with_invalid_config(self) -> None:
+        """Test container behavior with invalid configuration."""
+        container = Container()
+
+        with pytest.raises(ValueError, match="API token must be at least"):
+            container.config()

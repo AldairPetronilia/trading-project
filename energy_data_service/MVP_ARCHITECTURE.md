@@ -581,6 +581,25 @@ async def trigger_data_collection(
 - Integration tests for full pipeline
 - Fixtures with real GL_MarketDocument XML
 
+## Application Lifecycle Management
+
+**Resource Management Philosophy**: Database connection lifecycle should be managed at the application level (FastAPI startup/shutdown events), not within the dependency injection container. The DI container's responsibility is purely dependency resolution and injection.
+
+**Implementation Pattern**:
+```python
+# In FastAPI application or main entry point
+async def startup():
+    container = Container()
+    # Test database connection
+    await container.database().engine.begin()
+
+async def shutdown():
+    # Cleanup database connections
+    await container.database().engine.dispose()
+```
+
+**Container Responsibility**: The `Container` class should focus solely on dependency injection without lifecycle management methods. Resource cleanup is handled by the application framework or main application entry point.
+
 This MVP gives you a solid foundation that handles the complex XML-to-database transformation while being ready to scale to additional data sources and more sophisticated features.
 
 <function_calls>
