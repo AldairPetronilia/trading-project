@@ -81,6 +81,34 @@ A focused MVP that leverages your existing `entsoe_client` to collect GL_MarketD
 
 **Ready for Next Step**: Repository pattern implementation for data access layer.
 
+## Repository Pattern Purpose & Responsibilities
+
+**Purpose**: Repositories serve as the **data access layer** that provides a clean abstraction between business logic and the database, acting as an **in-memory collection interface** for database entities.
+
+**Key Responsibilities**:
+1. **Abstract database operations** - Hide SQL/ORM complexity behind simple method calls
+2. **Provide type-safe data access** - Return proper domain models with full type checking
+3. **Enable testability** - Can be easily mocked for unit testing
+4. **Centralize query logic** - Keep complex queries in one place
+5. **Support the Repository Pattern** - A well-established architectural pattern for data access
+
+**In the Data Flow**:
+```
+Collector → Processor → Repository → Database
+                           ↑
+                    Your API queries this
+```
+
+The repository sits between **business logic** (services, API endpoints) and the **database**, providing methods like:
+```python
+# Instead of writing raw SQL everywhere
+await energy_repo.get_load_data_by_area_and_time_range("DE", start, end)
+await energy_repo.batch_upsert_data_points(processed_data_points)
+await energy_repo.get_latest_data_for_areas(["DE", "FR", "NL"])
+```
+
+This keeps services clean and focused on business logic rather than database mechanics.
+
 ## MVP Repository Structure
 
 ```
