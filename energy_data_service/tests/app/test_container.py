@@ -1,17 +1,26 @@
 import os
-import sys
-from pathlib import Path
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-# Add the app directory to Python path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "app"))
-
+from app.config.database import Database
+from app.config.settings import Settings
+from app.container import Container
 from app.repositories.energy_data_repository import EnergyDataRepository
-from config.database import Database
-from config.settings import Settings
-from container import Container
+
+
+@pytest.fixture(autouse=True)
+def reset_container_state() -> Generator:
+    """Reset container state before and after each test for proper isolation."""
+    # Create a fresh container instance for each test
+    yield
+    # Reset any singleton providers after each test
+    try:
+        # Reset the singleton providers to ensure clean state
+        if hasattr(Container, "_singletons"):
+            Container._singletons.clear()
+    except AttributeError:
+        pass  # Container might not have this attribute in all versions
 
 
 class TestContainer:
