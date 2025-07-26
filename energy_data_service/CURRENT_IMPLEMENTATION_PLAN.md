@@ -6,7 +6,7 @@ Based on the completed Repository Pattern Layer, the next step is implementing t
 
 ### What to implement next:
 
-1. **Collector Exception Hierarchy** (`app/exceptions/collector_exceptions.py`)
+1. **(DONE) Collector Exception Hierarchy** (`app/exceptions/collector_exceptions.py`)
    - Define domain-specific exceptions for data collection operations
    - Provide structured error information with context preservation
    - Enable proper exception chaining with `raise ... from e` pattern
@@ -26,7 +26,7 @@ Based on the completed Repository Pattern Layer, the next step is implementing t
 
 4. **Dependency Injection Integration** (`app/container.py`)
    - Add collector providers using Factory pattern
-   - Wire dependencies: Settings ’ EntsoeClient ’ EntsoeCollector
+   - Wire dependencies: Settings ï¿½ EntsoeClient ï¿½ EntsoeCollector
    - Maintain proper provider scoping and lifecycle management
    - Follow established DI patterns from repository layer
 
@@ -58,7 +58,7 @@ Based on the completed Repository Pattern Layer, the next step is implementing t
 
 ### Test Coverage Requirements:
 
-1. **Collector Exception Tests** (`tests/app/exceptions/test_collector_exceptions.py`)
+1. **(DONE) Collector Exception Tests** (`tests/app/exceptions/test_collector_exceptions.py`)
    - Exception hierarchy validation and proper inheritance
    - Context preservation and error message formatting
    - Exception chaining validation with `raise ... from e`
