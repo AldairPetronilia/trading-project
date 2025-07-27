@@ -81,6 +81,43 @@ A focused MVP that leverages your existing `entsoe_client` to collect GL_MarketD
 
 **✅ Repository Pattern Layer Completed** (2025-01-24): Production-ready data access layer with comprehensive integration testing.
 
+**✅ Data Collectors Layer Completed** (2025-01-27): Production-ready data collection layer with comprehensive testing and real API integration.
+
+### Data Collectors Layer Implementation Completed
+
+**✅ Exception Hierarchy & Error Handling**:
+- **`app/exceptions/collector_exceptions.py`**: Complete 8-class exception hierarchy with structured error context, HTTP mapping utilities, and multi-source compatibility
+- Domain-specific exceptions: `CollectionError`, `DataSourceConnectionError`, `ApiRateLimitError`, `DataFormatError`, `RequestTimeoutError`, `AuthenticationError`, `ApiValidationError`, `ClientError`
+- Production features: Error context preservation, operation tracking, HTTP status mapping, multi-data-source error handling
+
+**✅ ENTSO-E Collector Implementation**:
+- **`app/collectors/entsoe_collector.py`**: Production-ready collector with 6 comprehensive load data methods and health check functionality
+- Complete method coverage: `get_actual_total_load`, `get_day_ahead_load_forecast`, `get_week_ahead_load_forecast`, `get_month_ahead_load_forecast`, `get_year_ahead_load_forecast`, `get_year_ahead_forecast_margin`
+- Proper async patterns: Full async/await implementation with comprehensive type annotations
+- Delegation architecture: Clean delegation to `entsoe_client` with proper parameter forwarding and offset handling
+
+**✅ Dependency Injection Integration**:
+- **`app/container.py`**: Updated DI container with collector providers using Factory pattern
+- Complete dependency chain: Settings → EntsoEClientConfig → DefaultEntsoeClient → EntsoeCollector
+- Factory provider pattern: Singleton for settings, Factory for collector instances with proper token extraction
+- Secret token handling: Secure token extraction from settings using wrapper function pattern
+
+**✅ Comprehensive Test Coverage**:
+- **Unit Tests**: Complete coverage with 11 test methods covering delegation verification, parameter validation, offset handling, and initialization
+  - `tests/app/collectors/test_entsoe_collector.py`: Collector unit tests with mocked entsoe_client integration
+  - `tests/app/test_container.py`: Updated container tests for collector provider validation
+- **Exception Tests**: Comprehensive test suite with 39 test methods covering inheritance, error mapping, edge cases, and real-world scenarios
+  - `tests/app/exceptions/test_collector_exceptions.py`: Exception hierarchy tests with HTTP mapping and context validation
+- **Integration Tests**: **GOLD STANDARD** real ENTSO-E API testing with comprehensive method validation
+  - `tests/integration/test_collector_integration.py`: Real API integration tests with 8 test methods covering all collector functionality
+
+**✅ Production-Ready Features**:
+- **API Integration**: Real ENTSO-E API integration validated through comprehensive integration testing
+- **Type Safety**: Full mypy compliance demonstrated across unit and integration testing scenarios
+- **Error Handling**: Exception hierarchies and API error mapping tested with real API responses
+- **Method Coverage**: All 6 load data collection methods plus health check functionality validated
+- **Delegation Pattern**: Clean architecture with proper async delegation to underlying client library
+
 ### Repository Pattern Implementation Completed
 
 **✅ Exception Hierarchy & Error Handling**:
@@ -123,7 +160,7 @@ A focused MVP that leverages your existing `entsoe_client` to collect GL_MarketD
 - **Concurrency**: Multi-threaded operations and resource sharing validation proven
 - **Resource Management**: Proper database lifecycle, cleanup, and connection handling demonstrated
 
-**✅ Architecture Achievement**: **BATTLE-TESTED, PRODUCTION-READY** repository layer providing the complete data access foundation for the MVP data pipeline with **GOLD STANDARD** integration testing serving as reference examples for the entire project.
+**✅ Architecture Achievement**: **BATTLE-TESTED, PRODUCTION-READY** repository and data collection layers providing the complete data access and collection foundation for the MVP data pipeline with **GOLD STANDARD** integration testing serving as reference examples for the entire project.
 
 ## Repository Pattern Purpose & Responsibilities
 
@@ -165,10 +202,10 @@ energy_data_service/
 │   │   ├── __init__.py
 │   │   ├── settings.py            # ✅ COMPLETED: Pydantic settings
 │   │   └── database.py            # ✅ COMPLETED: Database connection factory
-│   ├── collectors/                # Data collection layer (your "clients")
+│   ├── collectors/                # ✅ COMPLETED: Data collection layer
 │   │   ├── __init__.py
-│   │   ├── base_collector.py      # Abstract collector interface
-│   │   └── entsoe_collector.py    # ENTSO-E data collection using your client
+│   │   ├── base_collector.py      # Abstract collector interface (not implemented)
+│   │   └── entsoe_collector.py    # ✅ COMPLETED: ENTSO-E data collection with full method coverage
 │   ├── processors/                # Data transformation layer
 │   │   ├── __init__.py
 │   │   ├── base_processor.py      # Abstract processor interface
@@ -203,7 +240,7 @@ energy_data_service/
 │   │   ├── __init__.py
 │   │   ├── config_validation_error.py # ✅ COMPLETED: Configuration exceptions
 │   │   ├── repository_exceptions.py   # ✅ COMPLETED: Repository exception hierarchy
-│   │   ├── collector_exceptions.py
+│   │   ├── collector_exceptions.py    # ✅ COMPLETED: Collector exception hierarchy
 │   │   └── processor_exceptions.py
 │   └── utils/                     # Shared utilities
 │       ├── __init__.py
@@ -221,15 +258,22 @@ energy_data_service/
 │   │   ├── models/
 │   │   │   ├── __init__.py
 │   │   │   └── test_load_data.py  # ✅ COMPLETED: Model tests
-│   │   └── repositories/
+│   │   ├── repositories/
+│   │   │   ├── __init__.py
+│   │   │   ├── test_base_repository.py      # ✅ COMPLETED: Base repository tests
+│   │   │   └── test_energy_data_repository.py # ✅ COMPLETED: Energy repository tests
+│   │   ├── collectors/             # ✅ COMPLETED: Collector unit tests
+│   │   │   ├── __init__.py
+│   │   │   └── test_entsoe_collector.py    # ✅ COMPLETED: Collector unit tests
+│   │   └── exceptions/            # ✅ COMPLETED: Exception tests
 │   │       ├── __init__.py
-│   │       ├── test_base_repository.py      # ✅ COMPLETED: Base repository tests
-│   │       └── test_energy_data_repository.py # ✅ COMPLETED: Energy repository tests
+│   │       └── test_collector_exceptions.py # ✅ COMPLETED: Collector exception tests
 │   ├── integration/               # ✅ COMPLETED: Integration tests (**GOLD STANDARD**)
 │   │   ├── __init__.py
 │   │   ├── test_container_integration.py    # ✅ COMPLETED: Container integration tests
 │   │   ├── test_repository_integration.py  # ✅ COMPLETED: Repository integration tests
 │   │   ├── test_database.py       # ✅ COMPLETED: Database integration tests
+│   │   ├── test_collector_integration.py   # ✅ COMPLETED: Real ENTSO-E API integration tests
 │   │   └── test_end_to_end.py     # Full collection -> storage -> API flow
 │   └── fixtures/
 │       ├── __init__.py
@@ -691,16 +735,16 @@ async def shutdown():
 2. **Database Foundation**: Async connection factory with TimescaleDB optimization
 3. **Data Models**: Unified energy data model with composite primary keys
 4. **Repository Pattern**: Complete data access layer with time-series optimization
-5. **Dependency Injection**: Production container with proper provider scoping
-6. **Exception Handling**: Comprehensive error hierarchies with context preservation
-7. **Integration Testing**: **GOLD STANDARD** tests with real database validation
+5. **Data Collectors**: ENTSO-E integration with full method coverage and real API testing
+6. **Dependency Injection**: Production container with proper provider scoping
+7. **Exception Handling**: Comprehensive error hierarchies with context preservation
+8. **Integration Testing**: **GOLD STANDARD** tests with real database and API validation
 
 **🚧 NEXT IMPLEMENTATION PHASES**:
-1. **Data Collectors**: Services to fetch data from ENTSO-E API using existing `entsoe_client`
-2. **Data Processors**: Business logic for transforming GL_MarketDocument XML to database models
-3. **Service Orchestration**: Business logic layer coordinating collection → processing → storage
-4. **API Layer**: FastAPI endpoints for serving energy data to modeling services
-5. **Task Scheduling**: Automated data collection and historical backfill capabilities
+1. **Data Processors**: Business logic for transforming GL_MarketDocument XML to database models
+2. **Service Orchestration**: Business logic layer coordinating collection → processing → storage
+3. **API Layer**: FastAPI endpoints for serving energy data to modeling services
+4. **Task Scheduling**: Automated data collection and historical backfill capabilities
 
 **🏗️ MVP FOUNDATION ACHIEVEMENT**: This MVP provides a **BATTLE-TESTED, PRODUCTION-READY** foundation that handles the complex database infrastructure and data access patterns needed for time-series energy data. The foundation layers are complete with **GOLD STANDARD** integration testing that serves as reference examples for implementing the remaining application layers.
 
