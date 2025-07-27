@@ -3,6 +3,7 @@ from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from app.collectors.entsoe_collector import EntsoeCollector
 from app.config.database import Database
 from app.config.settings import Settings
 from app.container import Container
@@ -34,6 +35,7 @@ class TestContainer:
         assert hasattr(container, "config")
         assert hasattr(container, "database")
         assert hasattr(container, "entsoe_client")
+        assert hasattr(container, "entsoe_collector")
         assert hasattr(container, "energy_data_repository")
 
     @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
@@ -121,3 +123,39 @@ class TestContainer:
 
         # Verify repository received the same database instance
         assert repository.database is database
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    @patch("app.container.EntsoEClientFactory.create_client")
+    def test_entsoe_collector_provider_creation(
+        self,
+        mock_create_client: AsyncMock,
+    ) -> None:
+        """Test that entsoe collector provider creates collector instance."""
+        mock_client = AsyncMock()
+        mock_create_client.return_value = mock_client
+
+        container = Container()
+
+        collector = container.entsoe_collector()
+
+        assert isinstance(collector, EntsoeCollector)
+        assert collector._client == mock_client
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    @patch("app.container.EntsoEClientFactory.create_client")
+    def test_collector_dependency_injection(
+        self,
+        mock_create_client: AsyncMock,
+    ) -> None:
+        """Test that collector receives proper entsoe_client dependency."""
+        mock_client = AsyncMock()
+        mock_create_client.return_value = mock_client
+
+        container = Container()
+
+        # Get instances
+        client = container.entsoe_client()
+        collector = container.entsoe_collector()
+
+        # Verify collector received the same client instance
+        assert collector._client is client

@@ -1,5 +1,6 @@
 from dependency_injector import containers, providers
 
+from app.collectors.entsoe_collector import EntsoeCollector
 from app.config.database import Database
 from app.config.settings import Settings
 from app.repositories.energy_data_repository import EnergyDataRepository
@@ -21,6 +22,11 @@ class Container(containers.DeclarativeContainer):
     database = providers.Singleton(Database, config=config)
 
     entsoe_client = providers.Factory(_create_entsoe_client, config=config)
+
+    entsoe_collector = providers.Factory(
+        EntsoeCollector,
+        entsoe_client=entsoe_client,
+    )
 
     energy_data_repository = providers.Factory(
         EnergyDataRepository,
