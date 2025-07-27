@@ -7,6 +7,7 @@ from app.collectors.entsoe_collector import EntsoeCollector
 from app.config.database import Database
 from app.config.settings import Settings
 from app.container import Container
+from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
 from app.repositories.energy_data_repository import EnergyDataRepository
 
 
@@ -37,6 +38,7 @@ class TestContainer:
         assert hasattr(container, "entsoe_client")
         assert hasattr(container, "entsoe_collector")
         assert hasattr(container, "energy_data_repository")
+        assert hasattr(container, "gl_market_document_processor")
 
     @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
     def test_config_provider_creation(self) -> None:
@@ -159,3 +161,48 @@ class TestContainer:
 
         # Verify collector received the same client instance
         assert collector._client is client
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_gl_market_document_processor_provider_creation(self) -> None:
+        """Test that GL_MarketDocument processor provider creates processor instance."""
+        container = Container()
+
+        processor = container.gl_market_document_processor()
+
+        assert isinstance(processor, GlMarketDocumentProcessor)
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_processor_no_dependencies(self) -> None:
+        """Test that processor is created without external dependencies."""
+        container = Container()
+
+        # Processor should be stateless and not require dependencies
+        processor1 = container.gl_market_document_processor()
+        processor2 = container.gl_market_document_processor()
+
+        # Should create new instances (Factory provider)
+        assert isinstance(processor1, GlMarketDocumentProcessor)
+        assert isinstance(processor2, GlMarketDocumentProcessor)
+        # Factory provider creates new instances each time
+        assert processor1 is not processor2
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_all_providers_resolution(self) -> None:
+        """Test that all providers can be resolved without errors."""
+        container = Container()
+
+        # Verify all providers can be instantiated
+        config = container.config()
+        database = container.database()
+        repository = container.energy_data_repository()
+        processor = container.gl_market_document_processor()
+
+        # Basic type checks
+        assert isinstance(config, Settings)
+        assert isinstance(database, Database)
+        assert isinstance(repository, EnergyDataRepository)
+        assert isinstance(processor, GlMarketDocumentProcessor)
+
+        # Verify dependency relationships
+        assert database.config is config
+        assert repository.database is database

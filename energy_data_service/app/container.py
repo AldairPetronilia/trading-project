@@ -3,6 +3,7 @@ from dependency_injector import containers, providers
 from app.collectors.entsoe_collector import EntsoeCollector
 from app.config.database import Database
 from app.config.settings import Settings
+from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
 from app.repositories.energy_data_repository import EnergyDataRepository
 from entsoe_client.client.entsoe_client import EntsoEClient
 from entsoe_client.client.entsoe_client_factory import EntsoEClientFactory
@@ -31,4 +32,8 @@ class Container(containers.DeclarativeContainer):
     energy_data_repository = providers.Factory(
         EnergyDataRepository,
         database=database,
+    )
+
+    gl_market_document_processor = providers.Factory(
+        GlMarketDocumentProcessor,
     )
