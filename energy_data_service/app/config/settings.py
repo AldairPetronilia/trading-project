@@ -105,6 +105,43 @@ class LoggingConfig(BaseModel):
     )
 
 
+class BackfillConfig(BaseModel):
+    """Historical data backfill configuration."""
+
+    historical_years: int = Field(
+        default=2,
+        description="Years of historical data to backfill",
+        ge=1,
+        le=10,
+    )
+    chunk_months: int = Field(
+        default=6,
+        description="Months per backfill chunk (6-12 optimal for ENTSO-E)",
+        ge=1,
+        le=12,
+    )
+    rate_limit_delay: float = Field(
+        default=2.0,
+        description="Rate limiting delay for backfill (slower than real-time)",
+        ge=0.5,
+        le=10.0,
+    )
+    max_concurrent_areas: int = Field(
+        default=1,
+        description="Max concurrent area backfills",
+        ge=1,
+        le=5,
+    )
+    enable_progress_persistence: bool = Field(
+        default=True,
+        description="Save backfill progress to database",
+    )
+    resume_incomplete_backfills: bool = Field(
+        default=True,
+        description="Resume interrupted backfills on startup",
+    )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).parent.parent.parent
@@ -138,6 +175,10 @@ class Settings(BaseSettings):
     http: HttpConfig = Field(
         default_factory=HttpConfig,
         description="HTTP configuration",
+    )
+    backfill: BackfillConfig = Field(
+        default_factory=BackfillConfig,
+        description="Backfill configuration",
     )
 
     @field_validator("environment")  # type: ignore[misc]

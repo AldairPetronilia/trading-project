@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from app.config.settings import Settings
+from app.config.settings import BackfillConfig, Settings
 from pydantic import ValidationError
 
 
@@ -426,3 +426,124 @@ class TestConfigValidationErrors:
             in error.get("msg", "")
             for error in errors
         )
+
+
+class TestBackfillConfig:
+    """Test suite for BackfillConfig validation and functionality."""
+
+    def test_backfill_config_defaults(self) -> None:
+        """Test BackfillConfig default values."""
+        config = BackfillConfig()
+
+        assert config.historical_years == 2
+        assert config.chunk_months == 6
+        assert config.rate_limit_delay == 2.0
+        assert config.max_concurrent_areas == 1
+        assert config.enable_progress_persistence is True
+        assert config.resume_incomplete_backfills is True
+
+    def test_backfill_config_custom_values(self) -> None:
+        """Test BackfillConfig with custom values."""
+        config = BackfillConfig(
+            historical_years=5,
+            chunk_months=12,
+            rate_limit_delay=1.0,
+            max_concurrent_areas=3,
+            enable_progress_persistence=False,
+            resume_incomplete_backfills=False,
+        )
+
+        assert config.historical_years == 5
+        assert config.chunk_months == 12
+        assert config.rate_limit_delay == 1.0
+        assert config.max_concurrent_areas == 3
+        assert config.enable_progress_persistence is False
+        assert config.resume_incomplete_backfills is False
+
+    def test_backfill_config_historical_years_validation(self) -> None:
+        """Test BackfillConfig historical_years validation."""
+        # Test valid range
+        BackfillConfig(historical_years=1)  # Minimum
+        BackfillConfig(historical_years=10)  # Maximum
+
+        # Test invalid values
+        with pytest.raises(ValidationError):
+            BackfillConfig(historical_years=0)  # Too low
+
+        with pytest.raises(ValidationError):
+            BackfillConfig(historical_years=11)  # Too high
+
+    def test_backfill_config_chunk_months_validation(self) -> None:
+        """Test BackfillConfig chunk_months validation."""
+        # Test valid range
+        BackfillConfig(chunk_months=1)  # Minimum
+        BackfillConfig(chunk_months=12)  # Maximum
+
+        # Test invalid values
+        with pytest.raises(ValidationError):
+            BackfillConfig(chunk_months=0)  # Too low
+
+        with pytest.raises(ValidationError):
+            BackfillConfig(chunk_months=13)  # Too high
+
+    def test_backfill_config_rate_limit_delay_validation(self) -> None:
+        """Test BackfillConfig rate_limit_delay validation."""
+        # Test valid range
+        BackfillConfig(rate_limit_delay=0.5)  # Minimum
+        BackfillConfig(rate_limit_delay=10.0)  # Maximum
+
+        # Test invalid values
+        with pytest.raises(ValidationError):
+            BackfillConfig(rate_limit_delay=0.4)  # Too low
+
+        with pytest.raises(ValidationError):
+            BackfillConfig(rate_limit_delay=10.1)  # Too high
+
+    def test_backfill_config_max_concurrent_areas_validation(self) -> None:
+        """Test BackfillConfig max_concurrent_areas validation."""
+        # Test valid range
+        BackfillConfig(max_concurrent_areas=1)  # Minimum
+        BackfillConfig(max_concurrent_areas=5)  # Maximum
+
+        # Test invalid values
+        with pytest.raises(ValidationError):
+            BackfillConfig(max_concurrent_areas=0)  # Too low
+
+        with pytest.raises(ValidationError):
+            BackfillConfig(max_concurrent_areas=6)  # Too high
+
+    def test_backfill_config_integration_in_settings(self) -> None:
+        """Test BackfillConfig integration in Settings class."""
+        settings = Settings(
+            entsoe_client={"api_token": "test-token-123"},
+            _env_file=None,
+        )
+
+        # Test that BackfillConfig is properly initialized
+        assert hasattr(settings, "backfill")
+        assert isinstance(settings.backfill, BackfillConfig)
+        assert settings.backfill.historical_years == 2
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENTSOE_CLIENT__API_TOKEN": "test-token-123456",
+            "BACKFILL__HISTORICAL_YEARS": "5",
+            "BACKFILL__CHUNK_MONTHS": "12",
+            "BACKFILL__RATE_LIMIT_DELAY": "1.5",
+            "BACKFILL__MAX_CONCURRENT_AREAS": "2",
+            "BACKFILL__ENABLE_PROGRESS_PERSISTENCE": "false",
+            "BACKFILL__RESUME_INCOMPLETE_BACKFILLS": "false",
+        },
+        clear=True,
+    )
+    def test_backfill_config_environment_variables(self) -> None:
+        """Test BackfillConfig loading from environment variables."""
+        settings = Settings()
+
+        assert settings.backfill.historical_years == 5
+        assert settings.backfill.chunk_months == 12
+        assert settings.backfill.rate_limit_delay == 1.5
+        assert settings.backfill.max_concurrent_areas == 2
+        assert settings.backfill.enable_progress_persistence is False
+        assert settings.backfill.resume_incomplete_backfills is False
