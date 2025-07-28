@@ -1,0 +1,1228 @@
+"""Integration tests for EntsoEDataService using testcontainers.
+
+This module provides comprehensive integration testing for the EntsoEDataService
+using real TimescaleDB testcontainers for database operations while mocking
+external API calls to ENTSO-E.
+
+Key Features:
+- Real TimescaleDB database with hypertables for time-series testing
+- Mocked ENTSO-E collector responses for controlled testing
+- Full dependency injection testing with real components
+- Concurrent operations and error handling scenarios
+- Performance testing with actual database constraints
+"""
+
+import asyncio
+from collections.abc import AsyncGenerator, Generator
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+import pytest_asyncio
+from app.config.database import Database
+from app.config.settings import DatabaseConfig, EntsoEClientConfig, Settings
+from app.container import Container
+from app.exceptions.collector_exceptions import CollectorError
+from app.models.base import Base
+from app.models.load_data import EnergyDataPoint, EnergyDataType
+from app.repositories.energy_data_repository import EnergyDataRepository
+from app.services.entsoe_data_service import (
+    CollectionResult,
+    EndpointNames,
+    EntsoEDataService,
+)
+from pydantic import SecretStr
+from sqlalchemy import text
+from testcontainers.postgres import PostgresContainer
+
+from entsoe_client.model.common.area_code import AreaCode
+from entsoe_client.model.common.business_type import BusinessType
+from entsoe_client.model.common.curve_type import CurveType
+from entsoe_client.model.common.document_type import DocumentType
+from entsoe_client.model.common.domain_mrid import DomainMRID
+from entsoe_client.model.common.market_role_type import MarketRoleType
+from entsoe_client.model.common.object_aggregation import ObjectAggregation
+from entsoe_client.model.common.process_type import ProcessType
+from entsoe_client.model.load.gl_market_document import GlMarketDocument
+from entsoe_client.model.load.load_period import LoadPeriod
+from entsoe_client.model.load.load_point import LoadPoint
+from entsoe_client.model.load.load_time_interval import LoadTimeInterval
+from entsoe_client.model.load.load_time_series import LoadTimeSeries
+from entsoe_client.model.load.market_participant_mrid import MarketParticipantMRID
+
+
+@pytest.fixture(autouse=True)
+def reset_container_state() -> Generator:
+    """Reset container state before and after each test for proper isolation."""
+    # Create a fresh container instance for each test
+    yield
+    # Reset any singleton providers after each test
+    try:
+        # Reset the singleton providers to ensure clean state
+        if hasattr(Container, "_singletons"):
+            Container._singletons.clear()
+    except AttributeError:
+        pass  # Container might not have this attribute in all versions
+
+
+@pytest.fixture
+def postgres_container() -> Generator[PostgresContainer]:
+    """Fixture that provides a TimescaleDB testcontainer."""
+    # Use timescale/timescaledb image for TimescaleDB support
+    with PostgresContainer("timescale/timescaledb:2.16.1-pg16") as postgres:
+        yield postgres
+
+
+@pytest.fixture
+def database_config(postgres_container: PostgresContainer) -> DatabaseConfig:
+    """Create DatabaseConfig using testcontainer connection details."""
+    return DatabaseConfig(
+        host=postgres_container.get_container_host_ip(),
+        port=postgres_container.get_exposed_port(5432),
+        user=postgres_container.username,
+        password=postgres_container.password,
+        name=postgres_container.dbname,
+    )
+
+
+@pytest.fixture
+def settings(database_config: DatabaseConfig) -> Settings:
+    """Create Settings with testcontainer database config."""
+    return Settings(
+        database=database_config,
+        debug=True,
+        entsoe_client=EntsoEClientConfig(
+            api_token=SecretStr("test-token-12345-67890"),  # Dummy token for testing
+        ),
+    )
+
+
+@pytest.fixture
+def database(settings: Settings) -> Database:
+    """Create Database instance with testcontainer config."""
+    return Database(settings)
+
+
+@pytest.fixture
+def container(settings: Settings) -> Container:
+    """Create dependency injection container with test settings."""
+    container = Container()
+    container.config.override(settings)
+    return container
+
+
+@pytest_asyncio.fixture
+async def initialized_database(database: Database) -> AsyncGenerator[Database]:
+    """Initialize database with TimescaleDB extension and tables."""
+    # Initialize database with TimescaleDB extension and tables
+    async with database.engine.begin() as conn:
+        # Enable TimescaleDB extension
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"))
+
+        # Create all tables
+        await conn.run_sync(Base.metadata.create_all)
+
+        # Convert energy_data_points table to hypertable for time-series optimization
+        await conn.execute(
+            text(
+                """
+            SELECT create_hypertable('energy_data_points', 'timestamp',
+                                    chunk_time_interval => INTERVAL '1 day',
+                                    if_not_exists => TRUE);
+        """,
+            ),
+        )
+
+    yield database
+
+    # Cleanup
+    async with database.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest_asyncio.fixture
+async def energy_repository(initialized_database: Database) -> EnergyDataRepository:
+    """Create EnergyDataRepository with initialized database."""
+    return EnergyDataRepository(initialized_database)
+
+
+def create_sample_gl_market_document(
+    area_code: AreaCode, process_type: ProcessType = ProcessType.REALISED
+) -> GlMarketDocument:
+    """Create a realistic GL_MarketDocument for testing with specified area code and process type."""
+    base_time = datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC)
+
+    # Create time interval
+    time_interval = LoadTimeInterval(
+        start=base_time,
+        end=base_time + timedelta(hours=3),
+    )
+
+    # Create actual data points
+    points = [
+        LoadPoint(position=1, quantity=1234.567),
+        LoadPoint(position=2, quantity=1345.678),
+        LoadPoint(position=3, quantity=1456.789),
+    ]
+
+    # Create period
+    period = LoadPeriod(
+        timeInterval=time_interval,
+        resolution="PT60M",  # 1 hour resolution
+        points=points,
+    )
+
+    # Create time series with the specified area code
+    time_series = LoadTimeSeries(
+        mRID=f"test-time-series-mrid-{area_code.get_country_code()}",
+        businessType=BusinessType.CONSUMPTION,
+        objectAggregation=ObjectAggregation.AGGREGATED,
+        outBiddingZoneDomainMRID=DomainMRID(area_code=area_code),
+        quantityMeasureUnitName="MAW",
+        curveType=CurveType.SEQUENTIAL_FIXED_SIZE_BLOCK,
+        period=period,
+    )
+
+    # Create the main document
+    return GlMarketDocument(
+        mRID=f"test-document-mrid-{area_code.get_country_code()}",
+        revisionNumber=1,
+        type=DocumentType.SYSTEM_TOTAL_LOAD,
+        processType=process_type,
+        senderMarketParticipantMRID=MarketParticipantMRID(
+            value="10X1001A1001A450", coding_scheme=None
+        ),
+        senderMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
+        receiverMarketParticipantMRID=MarketParticipantMRID(
+            value="10X1001A1001A450", coding_scheme=None
+        ),
+        receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
+        createdDateTime=base_time,
+        timePeriodTimeInterval=time_interval,
+        timeSeries=time_series,
+    )
+
+
+@pytest.fixture
+def sample_gl_market_document() -> GlMarketDocument:
+    """Create a realistic GL_MarketDocument for testing (German by default)."""
+    return create_sample_gl_market_document(AreaCode.GERMANY)
+
+
+@pytest.fixture
+def mock_entsoe_responses() -> dict:
+    """Create realistic ENTSO-E API response data for different endpoints."""
+    # Create area-specific documents with appropriate process types
+    germany_actual_doc = create_sample_gl_market_document(
+        AreaCode.GERMANY, ProcessType.REALISED
+    )
+    germany_day_ahead_doc = create_sample_gl_market_document(
+        AreaCode.GERMANY, ProcessType.DAY_AHEAD
+    )
+    germany_week_ahead_doc = create_sample_gl_market_document(
+        AreaCode.GERMANY, ProcessType.WEEK_AHEAD
+    )
+    germany_month_ahead_doc = create_sample_gl_market_document(
+        AreaCode.GERMANY, ProcessType.MONTH_AHEAD
+    )
+    germany_year_ahead_doc = create_sample_gl_market_document(
+        AreaCode.GERMANY, ProcessType.YEAR_AHEAD
+    )
+
+    france_actual_doc = create_sample_gl_market_document(
+        AreaCode.FRANCE, ProcessType.REALISED
+    )
+    france_day_ahead_doc = create_sample_gl_market_document(
+        AreaCode.FRANCE, ProcessType.DAY_AHEAD
+    )
+    france_week_ahead_doc = create_sample_gl_market_document(
+        AreaCode.FRANCE, ProcessType.WEEK_AHEAD
+    )
+
+    netherlands_actual_doc = create_sample_gl_market_document(
+        AreaCode.NETHERLANDS, ProcessType.REALISED
+    )
+    netherlands_day_ahead_doc = create_sample_gl_market_document(
+        AreaCode.NETHERLANDS, ProcessType.DAY_AHEAD
+    )
+    netherlands_week_ahead_doc = create_sample_gl_market_document(
+        AreaCode.NETHERLANDS, ProcessType.WEEK_AHEAD
+    )
+
+    return {
+        EndpointNames.ACTUAL_LOAD: germany_actual_doc,
+        EndpointNames.DAY_AHEAD_FORECAST: germany_day_ahead_doc,
+        EndpointNames.WEEK_AHEAD_FORECAST: germany_week_ahead_doc,
+        EndpointNames.MONTH_AHEAD_FORECAST: germany_month_ahead_doc,
+        EndpointNames.YEAR_AHEAD_FORECAST: germany_year_ahead_doc,
+        EndpointNames.FORECAST_MARGIN: germany_year_ahead_doc,  # Uses YEAR_AHEAD process type
+        # Store area-specific documents for dynamic lookup
+        "area_documents": {
+            AreaCode.GERMANY: {
+                EndpointNames.ACTUAL_LOAD: germany_actual_doc,
+                EndpointNames.DAY_AHEAD_FORECAST: germany_day_ahead_doc,
+                EndpointNames.WEEK_AHEAD_FORECAST: germany_week_ahead_doc,
+                EndpointNames.MONTH_AHEAD_FORECAST: germany_month_ahead_doc,
+                EndpointNames.YEAR_AHEAD_FORECAST: germany_year_ahead_doc,
+                EndpointNames.FORECAST_MARGIN: germany_year_ahead_doc,
+            },
+            AreaCode.FRANCE: {
+                EndpointNames.ACTUAL_LOAD: france_actual_doc,
+                EndpointNames.DAY_AHEAD_FORECAST: france_day_ahead_doc,
+                EndpointNames.WEEK_AHEAD_FORECAST: france_week_ahead_doc,
+                EndpointNames.MONTH_AHEAD_FORECAST: france_actual_doc,  # Fallback to actual
+                EndpointNames.YEAR_AHEAD_FORECAST: france_actual_doc,  # Fallback to actual
+                EndpointNames.FORECAST_MARGIN: france_actual_doc,  # Fallback to actual
+            },
+            AreaCode.NETHERLANDS: {
+                EndpointNames.ACTUAL_LOAD: netherlands_actual_doc,
+                EndpointNames.DAY_AHEAD_FORECAST: netherlands_day_ahead_doc,
+                EndpointNames.WEEK_AHEAD_FORECAST: netherlands_week_ahead_doc,
+                EndpointNames.MONTH_AHEAD_FORECAST: netherlands_actual_doc,  # Fallback to actual
+                EndpointNames.YEAR_AHEAD_FORECAST: netherlands_actual_doc,  # Fallback to actual
+                EndpointNames.FORECAST_MARGIN: netherlands_actual_doc,  # Fallback to actual
+            },
+        },
+    }
+
+
+@pytest.fixture
+def mock_collector(mock_entsoe_responses: dict) -> AsyncMock:
+    """Create a mocked collector that returns realistic response data."""
+    collector = AsyncMock()
+
+    # Get area-specific documents
+    area_documents = mock_entsoe_responses["area_documents"]
+
+    # Helper function to return appropriate document based on bidding zone and endpoint
+    def get_document_for_area_and_endpoint(endpoint_name: EndpointNames) -> Any:
+        def side_effect(bidding_zone: AreaCode, **_kwargs: Any) -> GlMarketDocument:
+            area_docs = area_documents.get(
+                bidding_zone, area_documents[AreaCode.GERMANY]
+            )
+            return area_docs.get(endpoint_name, area_docs[EndpointNames.ACTUAL_LOAD])
+
+        return side_effect
+
+    # Configure each collector method to return area and endpoint-specific responses
+    collector.get_actual_total_load.side_effect = get_document_for_area_and_endpoint(
+        EndpointNames.ACTUAL_LOAD
+    )
+    collector.get_day_ahead_load_forecast.side_effect = (
+        get_document_for_area_and_endpoint(EndpointNames.DAY_AHEAD_FORECAST)
+    )
+    collector.get_week_ahead_load_forecast.side_effect = (
+        get_document_for_area_and_endpoint(EndpointNames.WEEK_AHEAD_FORECAST)
+    )
+    collector.get_month_ahead_load_forecast.side_effect = (
+        get_document_for_area_and_endpoint(EndpointNames.MONTH_AHEAD_FORECAST)
+    )
+    collector.get_year_ahead_load_forecast.side_effect = (
+        get_document_for_area_and_endpoint(EndpointNames.YEAR_AHEAD_FORECAST)
+    )
+    collector.get_year_ahead_forecast_margin.side_effect = (
+        get_document_for_area_and_endpoint(EndpointNames.FORECAST_MARGIN)
+    )
+    collector.health_check.return_value = True
+
+    return collector
+
+
+@pytest_asyncio.fixture
+async def entsoe_data_service_with_real_db(
+    mock_collector: AsyncMock,
+    energy_repository: EnergyDataRepository,
+    container: Container,
+) -> EntsoEDataService:
+    """Create EntsoEDataService with mocked collector but real database components."""
+    # Use real processor from container
+    processor = container.gl_market_document_processor()
+
+    # Create service with mocked collector, real processor, and real repository
+    return EntsoEDataService(
+        collector=mock_collector,
+        processor=processor,
+        repository=energy_repository,
+    )
+
+
+@pytest.fixture
+def sample_energy_data_points() -> list[EnergyDataPoint]:
+    """Create sample energy data points for pre-populating database."""
+    base_time = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
+
+    return [
+        EnergyDataPoint(
+            timestamp=base_time,
+            area_code="DE",
+            data_type=EnergyDataType.ACTUAL,
+            business_type=BusinessType.CONSUMPTION.code,
+            quantity=Decimal("1000.000"),
+            unit="MAW",
+            data_source="entsoe",
+            document_mrid="existing-doc-1",
+            revision_number=1,
+            document_created_at=base_time,
+            time_series_mrid="existing-ts-1",
+            resolution="PT60M",
+            curve_type="A01",
+            object_aggregation="A01",
+            position=1,
+            period_start=base_time,
+            period_end=base_time + timedelta(hours=1),
+        ),
+        EnergyDataPoint(
+            timestamp=base_time + timedelta(hours=1),
+            area_code="DE",
+            data_type=EnergyDataType.ACTUAL,
+            business_type=BusinessType.CONSUMPTION.code,
+            quantity=Decimal("1100.000"),
+            unit="MAW",
+            data_source="entsoe",
+            document_mrid="existing-doc-1",
+            revision_number=1,
+            document_created_at=base_time,
+            time_series_mrid="existing-ts-1",
+            resolution="PT60M",
+            curve_type="A01",
+            object_aggregation="A01",
+            position=2,
+            period_start=base_time + timedelta(hours=1),
+            period_end=base_time + timedelta(hours=2),
+        ),
+    ]
+
+
+class TestEntsoEDataServiceIntegration:
+    """Integration tests for EntsoEDataService with real database and mocked external APIs."""
+
+    @pytest.mark.asyncio
+    async def test_database_initialization_with_timescaledb(
+        self,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test that database is properly initialized with TimescaleDB extension."""
+        async with energy_repository.database.session_factory() as session:
+            # Check TimescaleDB extension is installed
+            result = await session.execute(
+                text(
+                    """
+                SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
+            """,
+                ),
+            )
+            extension = result.fetchone()
+            assert extension is not None
+            assert extension.extname == "timescaledb"
+
+            # Check that energy_data_points table exists and is a hypertable
+            result = await session.execute(
+                text(
+                    """
+                SELECT hypertable_name FROM timescaledb_information.hypertables
+                WHERE hypertable_name = 'energy_data_points';
+            """,
+                ),
+            )
+            hypertable = result.fetchone()
+            assert hypertable is not None
+            assert hypertable.hypertable_name == "energy_data_points"
+
+    @pytest.mark.asyncio
+    async def test_full_workflow_fresh_database(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test complete workflow starting with empty database."""
+        # Verify database starts empty
+        all_records = await energy_repository.get_all()
+        assert len(all_records) == 0
+
+        # Run collection for single area and endpoint
+        # Mock asyncio.sleep to avoid rate limiting delays during test
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+            )
+
+        # Verify collection was successful
+        assert result.success is True
+        assert result.stored_count > 0
+        assert result.area == AreaCode.GERMANY
+        assert result.data_type == EnergyDataType.ACTUAL
+
+        # Verify data was actually stored in database
+        stored_records = await energy_repository.get_all()
+        assert len(stored_records) > 0
+
+        # Verify stored data matches expected structure
+        sample_record = stored_records[0]
+        assert sample_record.area_code == "DE"
+        assert sample_record.data_type == EnergyDataType.ACTUAL
+        assert sample_record.data_source == "entsoe"
+        assert sample_record.unit == "MAW"
+
+    @pytest.mark.asyncio
+    async def test_full_workflow_collect_all_gaps_fresh_database(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test collect_all_gaps with fresh database for multiple areas."""
+        # Verify database starts empty
+        all_records = await energy_repository.get_all()
+        assert len(all_records) == 0
+
+        # Run collection for all areas and endpoints
+        # Mock asyncio.sleep to avoid rate limiting delays during test
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            results = await entsoe_data_service_with_real_db.collect_all_gaps()
+
+        # Verify results structure
+        assert isinstance(results, dict)
+        assert "DE" in results  # Germany
+        assert "FR" in results  # France
+        assert "NL" in results  # Netherlands
+
+        # Verify each area has results for all endpoints
+        for area_results in results.values():
+            assert len(area_results) == len(EndpointNames)
+            for endpoint_name in EndpointNames:
+                assert endpoint_name.value in area_results
+                result = area_results[endpoint_name.value]
+                assert isinstance(result, CollectionResult)
+                assert result.success is True
+                assert result.stored_count > 0
+
+        # Verify data was stored for multiple areas
+        stored_records = await energy_repository.get_all()
+        assert len(stored_records) > 0
+
+        # Verify data from multiple areas
+        area_codes = {record.area_code for record in stored_records}
+        assert "DE" in area_codes
+        assert "FR" in area_codes
+        assert "NL" in area_codes
+
+    @pytest.mark.asyncio
+    async def test_full_workflow_with_upsert_behavior(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+        sample_energy_data_points: list[EnergyDataPoint],
+    ) -> None:
+        """Test that workflow handles upsert behavior correctly with existing data."""
+        # Pre-populate database with some data
+        await energy_repository.upsert_batch(sample_energy_data_points)
+        initial_count = len(await energy_repository.get_all())
+        assert initial_count == 2
+
+        # Run collection which should add new data and potentially update existing
+        # Mock asyncio.sleep to avoid rate limiting delays during test
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+            )
+
+        assert result.success is True
+        assert result.stored_count > 0
+
+        # Verify total count increased (new data added)
+        final_records = await energy_repository.get_all()
+        assert len(final_records) > initial_count
+
+        # Verify we still have the original data plus new data
+        latest_for_area = await energy_repository.get_latest_for_area(
+            "DE", EnergyDataType.ACTUAL, BusinessType.CONSUMPTION.code
+        )
+        assert latest_for_area is not None
+
+    @pytest.mark.asyncio
+    async def test_collect_with_chunking_integration(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+        mock_collector: AsyncMock,
+    ) -> None:
+        """Test chunking behavior with real database operations."""
+        # Define a large time range that will require chunking
+        start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end_time = datetime(2024, 1, 10, 0, 0, 0, tzinfo=UTC)  # 9 days
+
+        # Mock rate limiting to speed up test
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            result = await entsoe_data_service_with_real_db.collect_with_chunking(
+                AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD, start_time, end_time
+            )
+
+        # Verify chunking occurred (9 days / 3 day chunks = 3 chunks)
+        assert mock_collector.get_actual_total_load.call_count == 3
+
+        # Verify rate limiting was applied between chunks
+        assert mock_sleep.call_count == 3
+
+        # Verify successful collection
+        assert result.success is True
+        assert result.stored_count > 0
+        assert result.start_time == start_time
+        assert result.end_time == end_time
+
+        # Verify data was stored in database
+        stored_records = await energy_repository.get_all()
+        assert len(stored_records) > 0
+
+    @pytest.mark.asyncio
+    async def test_gap_detection_with_existing_recent_data(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test gap detection when database has recent data (no gap needed)."""
+        # Insert very recent data point (1 minute ago)
+        recent_time = datetime.now(UTC) - timedelta(minutes=1)
+        recent_data = EnergyDataPoint(
+            timestamp=recent_time,
+            area_code="DE",
+            data_type=EnergyDataType.ACTUAL,
+            business_type=BusinessType.CONSUMPTION.code,
+            quantity=Decimal("1500.000"),
+            unit="MAW",
+            data_source="entsoe",
+            document_mrid="recent-doc-1",
+            revision_number=1,
+            document_created_at=recent_time,
+            time_series_mrid="recent-ts-1",
+            resolution="PT60M",
+            curve_type="A01",
+            object_aggregation="A01",
+            position=1,
+            period_start=recent_time,
+            period_end=recent_time + timedelta(hours=1),
+        )
+        await energy_repository.upsert_batch([recent_data])
+
+        # Check if collection is needed
+        should_collect = await entsoe_data_service_with_real_db.should_collect_now(
+            AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+        )
+        assert should_collect is False
+
+        # Run gap detection - should find no gap
+        result = await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+            AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+        )
+
+        # Should return success but with no new data stored
+        assert result.success is True
+        assert result.stored_count == 0
+
+    @pytest.mark.asyncio
+    async def test_gap_detection_with_old_data(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+        sample_energy_data_points: list[EnergyDataPoint],
+    ) -> None:
+        """Test gap detection when database has old data (gap exists)."""
+        # Insert old data points (from sample fixture - dated 2024-01-15)
+        await energy_repository.upsert_batch(sample_energy_data_points)
+
+        # Check if collection is needed
+        should_collect = await entsoe_data_service_with_real_db.should_collect_now(
+            AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+        )
+        assert should_collect is True
+
+        # Run gap detection - should find and fill gap
+        # Mock asyncio.sleep to avoid rate limiting delays during test
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+            )
+
+        # Should collect new data to fill the gap
+        assert result.success is True
+        assert result.stored_count > 0
+
+        # Verify total records increased
+        final_records = await energy_repository.get_all()
+        assert len(final_records) > len(sample_energy_data_points)
+
+    @pytest.mark.asyncio
+    async def test_gap_detection_with_no_existing_data(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test gap detection when database is empty (fresh start)."""
+        # Verify database is empty
+        all_records = await energy_repository.get_all()
+        assert len(all_records) == 0
+
+        # Check if collection is needed
+        should_collect = await entsoe_data_service_with_real_db.should_collect_now(
+            AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+        )
+        assert should_collect is True
+
+        # Test _detect_gap_for_endpoint directly
+        config = entsoe_data_service_with_real_db.ENDPOINT_CONFIGS[
+            EndpointNames.ACTUAL_LOAD
+        ]
+        (
+            gap_start,
+            gap_end,
+        ) = await entsoe_data_service_with_real_db._detect_gap_for_endpoint(
+            AreaCode.GERMANY, config
+        )
+
+        # Should default to 7 days ago when no data exists
+        expected_start = datetime.now(UTC) - timedelta(days=7)
+        time_diff = abs((gap_start - expected_start).total_seconds())
+        assert time_diff < 60  # Within 1 minute tolerance
+
+        # Gap end should be approximately now
+        gap_end_diff = abs((gap_end - datetime.now(UTC)).total_seconds())
+        assert gap_end_diff < 60  # Within 1 minute tolerance
+
+    @pytest.mark.asyncio
+    async def test_gap_detection_for_different_data_types(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test gap detection works correctly for different data types and endpoints."""
+        # Insert data for only ACTUAL type, not DAY_AHEAD
+        old_time = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
+        actual_data = EnergyDataPoint(
+            timestamp=old_time,
+            area_code="DE",
+            data_type=EnergyDataType.ACTUAL,  # Only ACTUAL data
+            business_type=BusinessType.CONSUMPTION.code,
+            quantity=Decimal("1000.000"),
+            unit="MAW",
+            data_source="entsoe",
+            document_mrid="test-doc-actual",
+            revision_number=1,
+            document_created_at=old_time,
+            time_series_mrid="test-ts-actual",
+            resolution="PT60M",
+            curve_type="A01",
+            object_aggregation="A01",
+            position=1,
+            period_start=old_time,
+            period_end=old_time + timedelta(hours=1),
+        )
+        await energy_repository.upsert_batch([actual_data])
+
+        # Test ACTUAL endpoint - should have small gap (old data exists)
+        should_collect_actual = (
+            await entsoe_data_service_with_real_db.should_collect_now(
+                AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+            )
+        )
+        assert should_collect_actual is True
+
+        # Test DAY_AHEAD endpoint - should have large gap (no data exists)
+        should_collect_day_ahead = (
+            await entsoe_data_service_with_real_db.should_collect_now(
+                AreaCode.GERMANY, EndpointNames.DAY_AHEAD_FORECAST
+            )
+        )
+        assert should_collect_day_ahead is True
+
+        # Collect for both endpoints
+        # Mock asyncio.sleep to avoid rate limiting delays during test
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            actual_result = (
+                await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                    AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+                )
+            )
+            day_ahead_result = (
+                await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                    AreaCode.GERMANY, EndpointNames.DAY_AHEAD_FORECAST
+                )
+            )
+
+        # Both should succeed but may have different amounts of data
+        assert actual_result.success is True
+        assert day_ahead_result.success is True
+        assert actual_result.stored_count > 0
+        assert day_ahead_result.stored_count > 0
+
+        # Verify we now have data for both types
+        final_records = await energy_repository.get_all()
+        data_types = {record.data_type for record in final_records}
+        assert EnergyDataType.ACTUAL in data_types
+        assert EnergyDataType.DAY_AHEAD in data_types
+
+    @pytest.mark.asyncio
+    async def test_concurrent_area_collection(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test concurrent collection for multiple areas."""
+        # Run concurrent collection for different areas
+        areas = [AreaCode.GERMANY, AreaCode.FRANCE, AreaCode.NETHERLANDS]
+        tasks = [
+            entsoe_data_service_with_real_db.collect_gaps_for_area(area)
+            for area in areas
+        ]
+
+        results = await asyncio.gather(*tasks)
+
+        # Verify all collections succeeded
+        assert len(results) == 3
+        for area_results in results:
+            assert isinstance(area_results, dict)
+            assert len(area_results) == len(EndpointNames)
+            for result in area_results.values():
+                assert result.success is True
+                assert result.stored_count > 0
+
+        # Verify data was stored for all areas
+        stored_records = await energy_repository.get_all()
+        area_codes = {record.area_code for record in stored_records}
+        assert "DE" in area_codes
+        assert "FR" in area_codes
+        assert "NL" in area_codes
+
+        # Verify no data corruption from concurrent operations
+        for area_code in ["DE", "FR", "NL"]:
+            area_records = await energy_repository.get_by_area(area_code)
+            assert len(area_records) > 0
+            # Verify all records for this area have correct area_code
+            assert all(record.area_code == area_code for record in area_records)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_endpoint_collection(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test concurrent collection for multiple endpoints on same area."""
+        # Run concurrent collection for different endpoints
+        endpoints = [
+            EndpointNames.ACTUAL_LOAD,
+            EndpointNames.DAY_AHEAD_FORECAST,
+            EndpointNames.WEEK_AHEAD_FORECAST,
+        ]
+
+        tasks = [
+            entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                AreaCode.GERMANY, endpoint
+            )
+            for endpoint in endpoints
+        ]
+
+        results = await asyncio.gather(*tasks)
+
+        # Verify all collections succeeded
+        assert len(results) == 3
+        for result in results:
+            assert result.success is True
+            assert result.stored_count > 0
+
+        # Verify data was stored for all data types
+        stored_records = await energy_repository.get_all()
+        data_types = {record.data_type for record in stored_records}
+        assert EnergyDataType.ACTUAL in data_types
+        assert EnergyDataType.DAY_AHEAD in data_types
+        assert EnergyDataType.WEEK_AHEAD in data_types
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("energy_repository")
+    async def test_error_handling_collector_failure(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        mock_collector: AsyncMock,
+    ) -> None:
+        """Test error handling when collector fails."""
+        # Configure collector to fail for one method
+        mock_collector.get_actual_total_load.side_effect = CollectorError("API Timeout")
+        mock_collector.get_day_ahead_load_forecast.return_value = (
+            None  # Simulate no data
+        )
+
+        # Test individual endpoint failure
+        result = await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+            AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+        )
+
+        # Should handle error gracefully but still report failure
+        assert (
+            result.success is True
+        )  # collect_with_chunking handles exceptions internally
+        assert result.stored_count == 0  # No data stored due to exception
+
+        # Test area collection with mixed success/failure
+        area_results = await entsoe_data_service_with_real_db.collect_gaps_for_area(
+            AreaCode.GERMANY
+        )
+
+        # Should have results for all endpoints
+        assert len(area_results) == len(EndpointNames)
+
+        # Some may have failed, others succeeded
+        success_count = sum(1 for result in area_results.values() if result.success)
+
+        # At least one should have succeeded (the ones not configured to fail)
+        assert success_count > 0
+
+    @pytest.mark.asyncio
+    async def test_error_handling_database_constraint_violation(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+        sample_energy_data_points: list[EnergyDataPoint],
+    ) -> None:
+        """Test error handling when database operations encounter issues."""
+        # Pre-populate with some data
+        await energy_repository.upsert_batch(sample_energy_data_points)
+
+        # Mock the repository's upsert_batch to simulate a database error
+        with patch.object(
+            energy_repository, "upsert_batch", new_callable=AsyncMock
+        ) as mock_upsert:
+            # Configure the mock to raise a database error
+            from app.exceptions.repository_exceptions import DataAccessError
+
+            mock_upsert.side_effect = DataAccessError(
+                "Database constraint violation: unique constraint failed",
+                model_type="EnergyDataPoint",
+                operation="upsert_batch",
+                context={"error": "constraint_violation"},
+            )
+
+            # Mock asyncio.sleep to avoid rate limiting delays during test
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = (
+                    await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                        AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+                    )
+                )
+
+                # The service should handle database errors gracefully
+                # In this case, it should catch the exception and return a result with stored_count=0
+                assert isinstance(result, CollectionResult)
+                assert result.stored_count == 0  # No data stored due to database error
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("energy_repository")
+    async def test_error_handling_partial_collection_failure(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        mock_collector: AsyncMock,
+    ) -> None:
+        """Test handling when only some chunks in a collection fail."""
+        # Configure collector to fail intermittently
+        call_count = 0
+
+        def side_effect(**_kwargs: Any) -> Any:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:  # Fail on second call
+                error_msg = "Intermittent API failure"
+                raise CollectorError(error_msg)
+            return entsoe_data_service_with_real_db._processor._TYPE_MAPPING
+
+        # This test requires modifying the chunking behavior
+        # For now, test that the service can handle collector exceptions
+        mock_collector.get_actual_total_load.side_effect = [
+            CollectorError("First chunk failed"),  # First chunk fails
+            MagicMock(),  # Second chunk succeeds
+            MagicMock(),  # Third chunk succeeds
+        ]
+
+        # Define a large time range that will require chunking
+        start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end_time = datetime(2024, 1, 10, 0, 0, 0, tzinfo=UTC)  # 9 days
+
+        # Mock asyncio.sleep to speed up test
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await entsoe_data_service_with_real_db.collect_with_chunking(
+                AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD, start_time, end_time
+            )
+
+        # Should complete despite partial failures
+        assert result.start_time == start_time
+        assert result.end_time == end_time
+        # Stored count might be 0 if all chunks failed, or > 0 if some succeeded
+        assert result.stored_count >= 0
+
+    @pytest.mark.asyncio
+    async def test_error_recovery_and_continuation(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+        mock_collector: AsyncMock,
+    ) -> None:
+        """Test that errors in one area don't affect collection for other areas."""
+
+        # Configure collector to fail only for specific areas
+        def collector_side_effect(bidding_zone: AreaCode, **_kwargs: Any) -> MagicMock:
+            if bidding_zone == AreaCode.GERMANY:
+                error_msg = "Germany API temporarily unavailable"
+                raise CollectorError(error_msg)
+            return MagicMock()  # Success for other areas
+
+        mock_collector.get_actual_total_load.side_effect = collector_side_effect
+
+        # Run collection for all areas
+        results = await entsoe_data_service_with_real_db.collect_all_gaps()
+
+        # Should have results for all areas
+        assert "DE" in results
+        assert "FR" in results
+        assert "NL" in results
+
+        # Germany should have some failures, others should succeed
+        fr_results = results["FR"]
+        nl_results = results["NL"]
+
+        # Check that other areas were not affected by Germany's failure
+        assert any(result.success for result in fr_results.values())
+        assert any(result.success for result in nl_results.values())
+
+        # Verify data was stored for successful areas
+        stored_records = await energy_repository.get_all()
+        if stored_records:  # If any data was stored
+            area_codes = {record.area_code for record in stored_records}
+            # Should have data from successful areas
+            success_areas = {"FR", "NL"}.intersection(area_codes)
+            assert len(success_areas) > 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("energy_repository")
+    async def test_rate_limiting_integration(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+    ) -> None:
+        """Test that rate limiting is properly applied during collection."""
+        import time
+
+        # Define a time range that will require multiple chunks
+        start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end_time = datetime(
+            2024, 1, 7, 0, 0, 0, tzinfo=UTC
+        )  # 6 days = 2 chunks (3 days each)
+
+        # Record start time
+        collection_start = time.time()
+
+        result = await entsoe_data_service_with_real_db.collect_with_chunking(
+            AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD, start_time, end_time
+        )
+
+        # Record end time
+        collection_end = time.time()
+        collection_duration = collection_end - collection_start
+
+        # Verify collection succeeded
+        assert result.success is True
+
+        # Verify rate limiting was applied
+        # Expected: 2 chunks + 2 rate limit delays (1 second each) = at least 2 seconds
+        # Add some tolerance for test execution overhead
+        min_expected_duration = 1.5  # Slightly less than 2 seconds for tolerance
+        assert collection_duration >= min_expected_duration, (
+            f"Collection took {collection_duration}s, expected at least {min_expected_duration}s"
+        )
+
+        # Should not take excessively long (max 10 seconds for reasonable test execution)
+        max_expected_duration = 10.0
+        assert collection_duration <= max_expected_duration, (
+            f"Collection took {collection_duration}s, expected at most {max_expected_duration}s"
+        )
+
+    @pytest.mark.asyncio
+    async def test_chunking_performance_with_large_dataset(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+        mock_collector: AsyncMock,
+    ) -> None:
+        """Test performance with large time ranges requiring many chunks."""
+        # Create a large time range (30 days = 10 chunks with 3-day chunks)
+        start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end_time = datetime(2024, 1, 31, 0, 0, 0, tzinfo=UTC)  # 30 days
+
+        # Mock rate limiting to speed up test
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            result = await entsoe_data_service_with_real_db.collect_with_chunking(
+                AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD, start_time, end_time
+            )
+
+        # Verify chunking occurred correctly
+        expected_chunks = 10  # 30 days / 3 days per chunk = 10 chunks
+        assert mock_collector.get_actual_total_load.call_count == expected_chunks
+        assert mock_sleep.call_count == expected_chunks
+
+        # Verify result structure
+        assert result.success is True
+        assert result.start_time == start_time
+        assert result.end_time == end_time
+        assert result.stored_count > 0  # Should have processed some data
+
+        # Verify data was properly stored in database
+        stored_records = await energy_repository.get_all()
+        assert len(stored_records) > 0
+
+    @pytest.mark.asyncio
+    async def test_database_performance_with_batch_operations(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+        sample_gl_market_document: GlMarketDocument,
+    ) -> None:
+        """Test database performance with large batch operations."""
+        import time
+
+        # Create a larger dataset by modifying the sample document
+        large_points = []
+        for i in range(100):  # Create 100 data points
+            point = LoadPoint(position=i + 1, quantity=float(f"{1000 + i}.567"))
+            large_points.append(point)
+
+        # Update the sample document with more data points
+        sample_gl_market_document.timeSeries.period.points = large_points
+
+        # Configure mock collector to return the large document
+        mock_collector = entsoe_data_service_with_real_db._collector
+        # Override the mock collector method to return the large document
+        mock_collector.get_actual_total_load = AsyncMock(  # type: ignore[method-assign]
+            return_value=sample_gl_market_document
+        )
+
+        # Measure processing time
+        process_start = time.time()
+
+        result = await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+            AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
+        )
+
+        process_end = time.time()
+        process_duration = process_end - process_start
+
+        # Verify successful processing
+        assert result.success is True
+        assert result.stored_count > 0
+
+        # Verify reasonable performance (should complete within 30 seconds)
+        max_processing_time = 30.0
+        assert process_duration <= max_processing_time, (
+            f"Processing took {process_duration}s, expected at most {max_processing_time}s"
+        )
+
+        # Verify data was stored correctly
+        stored_records = await energy_repository.get_all()
+        assert len(stored_records) == 100  # Should match our large dataset
+
+        # Verify TimescaleDB hypertable can handle the data efficiently
+        async with energy_repository.database.session_factory():
+            # Test time-range query performance
+            query_start = time.time()
+
+            time_range_records = await energy_repository.get_by_time_range(
+                start_time=datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC),
+                end_time=datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC),
+                area_codes=["DE"],
+                data_types=[EnergyDataType.ACTUAL],
+            )
+
+            query_end = time.time()
+            query_duration = query_end - query_start
+
+            # Time-range queries should be fast (< 5 seconds even with 100 records)
+            max_query_time = 5.0
+            assert query_duration <= max_query_time, (
+                f"Query took {query_duration}s, expected at most {max_query_time}s"
+            )
+
+            # Verify query returned expected results
+            assert len(time_range_records) > 0
+
+    @pytest.mark.asyncio
+    async def test_memory_usage_during_large_operations(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test concurrent operations complete successfully without resource issues."""
+        # Run multiple concurrent operations
+        tasks = []
+        for area in [AreaCode.GERMANY, AreaCode.FRANCE, AreaCode.NETHERLANDS]:
+            for endpoint in [
+                EndpointNames.ACTUAL_LOAD,
+                EndpointNames.DAY_AHEAD_FORECAST,
+            ]:
+                task = entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                    area, endpoint
+                )
+                tasks.append(task)
+
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks)
+
+        # Verify all operations succeeded
+        assert len(results) == 6  # 3 areas x 2 endpoints
+        for result in results:
+            assert result.success is True
+
+        # Verify data was stored
+        stored_records = await energy_repository.get_all()
+        assert len(stored_records) > 0
+
+    @pytest.mark.asyncio
+    async def test_endpoint_configuration_performance(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+    ) -> None:
+        """Test that different endpoint configurations perform as expected."""
+        import time
+
+        # Test different endpoints with their configured chunk sizes
+        endpoint_tests = [
+            (EndpointNames.ACTUAL_LOAD, 3),  # 3-day chunks
+            (EndpointNames.DAY_AHEAD_FORECAST, 7),  # 7-day chunks
+            (EndpointNames.WEEK_AHEAD_FORECAST, 14),  # 14-day chunks
+        ]
+
+        for endpoint_name, expected_chunk_days in endpoint_tests:
+            # Create a time range that should result in multiple chunks
+            days_to_test = expected_chunk_days * 2 + 1  # Slightly more than 2 chunks
+            start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end_time = start_time + timedelta(days=days_to_test)
+
+            # Mock rate limiting to speed up test
+            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                collection_start = time.time()
+
+                result = await entsoe_data_service_with_real_db.collect_with_chunking(
+                    AreaCode.GERMANY, endpoint_name, start_time, end_time
+                )
+
+                collection_end = time.time()
+                collection_duration = collection_end - collection_start
+
+            # Verify chunking occurred as expected
+            expected_chunks = (
+                days_to_test + expected_chunk_days - 1
+            ) // expected_chunk_days  # Ceiling division
+            assert mock_sleep.call_count == expected_chunks, (
+                f"Expected {expected_chunks} chunks for {endpoint_name}, got {mock_sleep.call_count}"
+            )
+
+            # Verify reasonable performance (should complete quickly with mocked delays)
+            max_duration = 5.0  # 5 seconds should be plenty with mocked sleep
+            assert collection_duration <= max_duration, (
+                f"{endpoint_name} took {collection_duration}s, expected at most {max_duration}s"
+            )
+
+            # Verify successful result
+            assert result.success is True

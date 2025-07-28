@@ -1,119 +1,111 @@
-# Current Implementation Plan - Data Processors Layer
+# Current Implementation Plan - Service Orchestration Layer
 
-## ✅ COMPLETED: Base Processor Infrastructure (2025-01-27)
+## Next Atomic Step: Service Layer Implementation
 
-The foundational processor layer has been implemented with production-quality code and comprehensive testing.
+Based on the completed core data pipeline (Collectors → Processors → Repositories), the next step is implementing the Service Orchestration layer that provides gap-filling, backfilling, and business logic coordination.
 
-### ✅ Completed Base Processor Components:
+### What to implement next:
 
-1. **✅ Base Processor Interface** (`app/processors/base_processor.py`)
-   - **Modern Python Syntax**: Uses Python 3.13+ generic class syntax `BaseProcessor[InputType, OutputType]`
-   - **Type Safety**: Full generic type support with TypeVar for input/output types
-   - **Clean Abstract Contract**: Single `process()` method that implementations must provide
-   - **Validation Helpers**: Optional input/output validation methods for implementations
-   - **Minimal Design**: No forced implementation details (logging, monitoring) - implementations decide
-   - **Error Integration**: Uses processor exception hierarchy with structured error handling
+1. **EntsoE Data Service** (`app/services/entsoe_data_service.py`)
+   - Gap detection and filling for all endpoint/area combinations
+   - Smart database-driven collection scheduling
+   - Intelligent chunking and rate limiting for large date ranges
+   - Comprehensive error handling and operation logging
 
-2. **✅ Processor Exception Hierarchy** (`app/exceptions/processor_exceptions.py`)
-   - **Complete Exception Hierarchy**: 6 specialized exception classes with inheritance
-     - `ProcessorError`: Base exception with operation context and HTTP mapping
-     - `DocumentParsingError`: XML/JSON structure parsing failures (HTTP 400)
-     - `DataValidationError`: Business rule validation failures (HTTP 422)
-     - `TimestampCalculationError`: Time-series timestamp calculation errors (HTTP 422)
-     - `MappingError`: Code mapping failures (ProcessType → EnergyDataType) (HTTP 422)
-     - `TransformationError`: Core transformation logic failures (HTTP 422)
-   - **Context Preservation**: All exceptions capture detailed context for debugging
-   - **Structured Logging**: `to_dict()` method for structured error logging
-   - **HTTP Integration**: `get_http_status_code()` for FastAPI error responses
-   - **Modern Typing**: Uses `dict[str, Any]` and `str | None` union syntax
+2. **Backfill Service** (`app/services/backfill_service.py`)
+   - One-time historical data loading with progress tracking
+   - Intelligent backfill detection based on database coverage
+   - Controlled historical collection with API-friendly chunking
+   - Resumable operations for large historical datasets
 
-3. **✅ Comprehensive Test Suite** (`tests/app/processors/test_base_processor.py`)
-   - **Full Test Coverage**: 11 test methods covering all base processor functionality
-   - **Mock Implementation**: Concrete test processors for validation testing
-   - **Async Testing**: Proper pytest-asyncio integration with `pytestmark`
-   - **Error Testing**: Validation error scenarios with exception context verification
-   - **Type Safety Testing**: Generic type structure validation
-   - **Edge Case Coverage**: None input, empty lists, non-list inputs
-   - **Abstract Enforcement**: Validates abstract class cannot be instantiated
+3. **Service Exceptions** (`app/services/service_exceptions.py`)
+   - Service-level error hierarchy with context preservation
+   - HTTP status code mapping for API integration
+   - Structured error logging for debugging and monitoring
+   - Operation context tracking for distributed debugging
 
-### ✅ Code Quality Achievements:
+4. **Configuration Enhancement** (`app/config/settings.py`)
+   - Collection intervals per endpoint type
+   - Backfill parameters and historical coverage requirements
+   - Rate limiting and chunking configurations
+   - Multi-area/region collection settings
 
-- **Modern Python**: Uses Python 3.13+ syntax (generic classes, union types)
-- **Linting Compliance**: Passes ruff linting with proper error message handling
-- **Type Safety**: Full mypy compliance with object typing for validation methods
-- **Import Organization**: Absolute imports, proper exception imports
-- **Documentation**: Comprehensive docstrings with Args/Returns/Raises sections
+### Implementation Requirements:
 
-## ✅ COMPLETED: GL_MarketDocument Data Transformation Pipeline (2025-01-27)
+#### EntsoE Data Service Features:
+- **Gap Detection Logic**: Query database for latest timestamp per endpoint/area, calculate gaps from last collection to now
+- **Smart Collection Scheduling**: Different collection intervals per endpoint type (actual: 30min, forecasts: 6hrs, margins: daily)
+- **Intelligent Chunking**: Split large date ranges into API-friendly chunks (30 days) with rate limiting between chunks
+- **Transaction Management**: Ensure data consistency across collector → processor → repository pipeline
+- **Error Recovery**: Handle partial failures with retry logic and continuation from last successful point
+- **Operation Logging**: Comprehensive structured logging for collection operations, timing, and data volumes
 
-**COMPLETE IMPLEMENTATION** of the GL_MarketDocument processor that transforms raw ENTSO-E GL_MarketDocument XML into database-ready EnergyDataPoint models with enterprise-grade code quality.
+#### Backfill Service Features:
+- **Coverage Analysis**: Check database for historical data coverage and identify gaps requiring backfill
+- **Controlled Collection**: Backfill historical data without overwhelming ENTSO-E APIs using slower, respectful collection
+- **Progress Tracking**: Persist backfill progress to enable resumable operations across service restarts
+- **Chunked Processing**: Process large historical periods in manageable chunks with proper rate limiting
+- **Data Validation**: Ensure historical data quality and completeness during backfill operations
+- **Resource Management**: Monitor and limit resource usage during intensive backfill operations
 
-### ✅ Completed GL_MarketDocument Components:
+#### Service Exception Hierarchy Features:
+- **Service Error Base**: Context-aware base exception class with operation tracking and timing information
+- **Collection Errors**: Specific exceptions for gap detection failures, collection timeouts, and API rate limiting
+- **Backfill Errors**: Dedicated exceptions for backfill progress tracking, resume failures, and historical data validation
+- **Transaction Errors**: Database transaction and consistency error handling with rollback capabilities
+- **HTTP Integration**: Status code mapping for FastAPI error responses and client error handling
+- **Structured Logging**: Error context serialization for structured logging and monitoring systems
 
-1. **✅ GL_MarketDocument Processor** (`app/processors/gl_market_document_processor.py`)
-   - **Complete Transformation**: GlMarketDocument → List[EnergyDataPoint] with all fields preserved
-   - **Nested Structure Handling**: Document → TimeSeries → Period → Points with proper validation
-   - **ProcessType + DocumentType Mapping**: 6 supported combinations including forecast margin data
-   - **Advanced Timestamp Calculation**: Full ISO 8601 duration parsing (PT15M, P1D, P1Y, P1DT1H, etc.)
-   - **Robust Area Code Extraction**: Uses AreaCode.get_country_code() with multiple fallbacks
-   - **Enterprise Code Quality**: No unnecessary comments, comprehensive docstrings, type-safe
+### Test Coverage Requirements:
 
-2. **✅ Dependency Injection Integration** (`app/container.py`)
-   - **Factory Provider**: `gl_market_document_processor` provider registered
-   - **Container Integration**: Seamless DI pattern with existing components
-   - **Extensibility Support**: Framework for future processor implementations
-   - **Pattern Consistency**: Maintains singleton/factory patterns throughout
+1. **EntsoE Data Service Unit Tests** (`tests/app/services/test_entsoe_data_service.py`)
+   - Gap detection logic with various database states (empty, partial, complete coverage)
+   - Collection scheduling with different endpoint intervals and area combinations
+   - Chunking logic with various date ranges and API limits
+   - Error handling and retry scenarios with mocked dependencies
 
-### ✅ Test Coverage Achievements:
+2. **Backfill Service Unit Tests** (`tests/app/services/test_backfill_service.py`)
+   - Coverage analysis with different historical data scenarios
+   - Progress tracking and resume functionality testing
+   - Chunked processing with various historical periods
+   - Resource management and rate limiting validation
 
-1. **✅ GL_MarketDocument Processor Unit Tests** (`tests/app/processors/test_gl_market_document_processor.py`)
-   - **47 Comprehensive Test Methods**: Complete transformation logic coverage
-   - **ProcessType + DocumentType Mapping**: All 6 supported combinations verified
-   - **Timestamp Calculation Testing**: PT15M, PT60M, PT1H, P1D, P1Y, P1M, and complex combinations
-   - **Edge Case Coverage**: None values, leap years, month boundaries, extreme quantities
-   - **Error Scenario Testing**: Invalid mappings, parsing failures, transformation errors
-   - **Forecast Margin Support**: A33+A70 combination testing for year-ahead forecast margin
+3. **Service Exception Tests** (`tests/app/services/test_service_exceptions.py`)
+   - Exception hierarchy inheritance and context preservation
+   - HTTP status code mapping for all exception types
+   - Structured logging output validation
+   - Error context serialization and deserialization
 
-2. **✅ Processor Exception Tests** (`tests/app/exceptions/test_processor_exceptions.py`)
-   - **Complete Exception Hierarchy**: All 6 exception classes with inheritance validation
-   - **Context Preservation**: Error chaining and structured logging verification
-   - **HTTP Status Code Mapping**: Proper HTTP response codes for each exception type
-   - **Error Message Formatting**: Structured error context and to_dict() functionality
+4. **Service Integration Tests** (`tests/integration/test_service_integration.py`)
+   - End-to-end pipeline orchestration with real database and collector
+   - Gap detection and filling with actual ENTSO-E API calls
+   - Backfill operations with historical data collection
+   - Performance validation with large datasets and concurrent operations
 
-3. **✅ Integration Tests** (`tests/integration/test_processor_integration.py`)
-   - **Realistic Data Scenarios**: German hourly load, French 15-minute forecasts
-   - **Performance Validation**: 1000+ data points processing capability
-   - **Multi-Country Processing**: Cross-country data handling with different resolutions
-   - **Edge Case Integration**: Year boundaries, extreme values, high revision numbers
+5. **Container Integration Tests** (`tests/app/test_container.py`)
+   - Service provider registration and dependency injection
+   - Service composition and lifecycle management
+   - Configuration injection and validation
 
-4. **✅ Container Integration Tests** (`tests/app/test_container.py`)
-   - **Processor Provider Registration**: Factory provider creation and resolution
-   - **Dependency Injection Validation**: Container wiring and instance management
-   - **Factory Pattern Testing**: Stateless processor creation with proper isolation
+### Dependencies:
 
-### ✅ Dependencies Successfully Integrated:
+- Builds on existing `EntsoeCollector` from `app/collectors/entsoe_collector.py`
+- Uses `GlMarketDocumentProcessor` from `app/processors/gl_market_document_processor.py`
+- Uses `EnergyDataRepository` from `app/repositories/energy_data_repository.py`
+- Uses `Settings` configuration from `app/config/settings.py`
+- Requires `Container` dependency injection from `app/container.py`
+- Integration with existing exception hierarchies from `app/exceptions/`
+- Future integration requirement for API layer and task scheduling
 
-- ✅ **EnergyDataPoint Model**: Full integration with `app/models/load_data.py` model structure
-- ✅ **GlMarketDocument Model**: Complete usage of `entsoe_client` workspace dependency models
-- ✅ **Dependency Injection**: Seamless integration with `app/container.py` DI framework
-- ✅ **Exception Hierarchy**: Leverages complete `app/exceptions/` processor error system
-- ✅ **Repository Integration**: Ready for `EnergyDataRepository` pipeline integration
-- ✅ **DateTime Utilities**: Native Python datetime/relativedelta handling for complex durations
-- ✅ **Service Layer Ready**: Foundation prepared for Service Orchestration layer integration
+### Success Criteria:
 
-### ✅ SUCCESS CRITERIA ACHIEVED:
+- **Gap Detection Accuracy**: Service correctly identifies missing data periods for all endpoint/area combinations
+- **Collection Completeness**: Successfully fills gaps without missing data points or creating duplicates
+- **Backfill Efficiency**: Historical data collection completes within reasonable timeframes without API throttling
+- **Error Handling Robustness**: Service gracefully handles API failures, database issues, and partial collection failures
+- **Performance Requirements**: Handles multiple areas and endpoints efficiently with proper resource management
+- **Code Quality Compliance**: Passes all checks (ruff, mypy, pre-commit) with comprehensive type annotations
+- **Integration Readiness**: Service layer provides clean interface for API endpoints and task scheduling
+- **Pattern Consistency**: Follows established dependency injection, error handling, and testing patterns
 
-- ✅ **Transformation Accuracy**: 100% accurate mapping with all fields preserved and validated
-- ✅ **Performance Requirements**: Designed and tested for 1000+ data points capability
-- ✅ **Error Handling Coverage**: Complete exception categorization with structured context
-- ✅ **Type Safety Compliance**: Full mypy strict compliance with zero type errors
-- ✅ **Test Coverage**: >95% coverage with 47 comprehensive test methods across 3 test files
-- ✅ **Code Quality Standards**: Enterprise-grade code with no unnecessary comments, proper docstrings
-- ✅ **Integration Readiness**: Complete DI integration for end-to-end data pipeline
-- ✅ **Extensibility Foundation**: Abstract BaseProcessor enables future data source processors
-
-## 🎯 IMPLEMENTATION STATUS: GL_MARKETDOCUMENT PROCESSOR COMPLETE
-
-**✅ PRODUCTION-READY IMPLEMENTATION**: The GL_MarketDocument processor is **FULLY IMPLEMENTED** and **ENTERPRISE-GRADE** with complete transformation logic, comprehensive error handling, robust testing, and seamless integration capabilities.
-
-**🚀 NEXT PHASE**: Service Orchestration layer to coordinate collectors → processors → repositories for complete end-to-end data pipeline automation.
+This Service Orchestration layer establishes the complete business logic foundation needed for API endpoints and automated scheduling, completing the core MVP data pipeline functionality.
