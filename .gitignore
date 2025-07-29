@@ -50,3 +50,5 @@ logs/
 
 # Database data (local storage)
 data/timescaledb/
+
+repomix-output.xml
