@@ -724,8 +724,8 @@ class BackfillService:
         try:
             async for session in self._database.get_database_session():
                 if progress.id:
-                    # Update existing record
-                    session.add(progress)
+                    # Update existing record - use merge to handle cross-session object
+                    await session.merge(progress)
                 else:
                     # Create new record
                     session.add(progress)
