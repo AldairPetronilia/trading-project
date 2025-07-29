@@ -1,5 +1,7 @@
 """Tests for AreaCode enum and its methods."""
 
+import warnings
+
 import pytest
 
 from entsoe_client.exceptions.unknown_area_code_error import UnknownAreaCodeError
@@ -43,8 +45,42 @@ class TestAreaCodeSafeFromCode:
         assert result is None
 
 
-class TestAreaCodeCountryCode:
-    """Test the get_country_code method."""
+class TestAreaCodeAreaCodeProperty:
+    """Test the area_code property."""
+
+    @pytest.mark.parametrize(
+        ("area_code", "expected_area_code"),
+        [
+            (AreaCode.FRANCE, "FR"),
+            (AreaCode.GERMANY, "DE"),
+            (AreaCode.SPAIN, "ES"),
+            (AreaCode.ITALY, "IT"),
+            (AreaCode.BELGIUM, "BE"),
+            (AreaCode.NETHERLANDS, "NL"),
+            (AreaCode.POLAND, "PL"),
+            (AreaCode.UNITED_KINGDOM, "UK"),
+            (AreaCode.SWEDEN_SE1, "SE1"),  # Regional subdivision
+            (AreaCode.DENMARK_DK1, "DK1"),  # Regional subdivision
+            (AreaCode.IT_SACOAC, "IT-SACOAC"),  # Composite area code
+            (AreaCode.UKRAINE_BEI, "UA-BEI"),  # Regional area code
+            (AreaCode.CWE_REGION, "CWE"),  # Regional code
+            (AreaCode.NORDIC, "Nordic"),  # Multi-country region
+            (AreaCode.CONTINENTAL_EUROPE, "Continental Europe"),  # Continental region
+            (AreaCode.DE_TRANSNET_BW, "DE(TransnetBW)"),  # TSO-specific area
+            (AreaCode.RUSSIA_KALININGRAD, "RU-KGD"),  # Sub-regional area
+        ],
+    )
+    def test_area_code_property(
+        self,
+        area_code: AreaCode,
+        expected_area_code: str,
+    ) -> None:
+        """Test area_code property returns correct manually curated codes."""
+        assert area_code.area_code == expected_area_code
+
+
+class TestAreaCodeCountryCodeDeprecated:
+    """Test the deprecated get_country_code method."""
 
     @pytest.mark.parametrize(
         ("area_code", "expected_country"),
@@ -57,31 +93,62 @@ class TestAreaCodeCountryCode:
             (AreaCode.NETHERLANDS, "NL"),
             (AreaCode.POLAND, "PL"),
             (AreaCode.UNITED_KINGDOM, "UK"),
-            (AreaCode.SWEDEN_SE1, "SE"),
-            (AreaCode.DENMARK_DK1, "DK"),
-            (AreaCode.IT_SACOAC, "IT"),  # Tests extraction from BZN|IT-SACOAC
-            (AreaCode.UKRAINE_BEI, "UA"),  # Tests extraction from multiple patterns
-            (AreaCode.CWE_REGION, "CW"),  # Regional code that extracts CW from REG|CWE
+            (
+                AreaCode.SWEDEN_SE1,
+                "SE1",
+            ),  # Now returns area_code instead of regex match
+            (
+                AreaCode.DENMARK_DK1,
+                "DK1",
+            ),  # Now returns area_code instead of regex match
+            (
+                AreaCode.IT_SACOAC,
+                "IT-SACOAC",
+            ),  # Now returns area_code instead of regex match
+            (
+                AreaCode.UKRAINE_BEI,
+                "UA-BEI",
+            ),  # Now returns area_code instead of regex match
+            (
+                AreaCode.CWE_REGION,
+                "CWE",
+            ),  # Now returns area_code instead of regex match
         ],
     )
-    def test_get_country_code_success(
+    def test_get_country_code_with_deprecation_warning(
         self,
         area_code: AreaCode,
         expected_country: str,
     ) -> None:
-        """Test country code extraction for various area codes."""
-        assert area_code.get_country_code() == expected_country
+        """Test deprecated get_country_code method shows warning and returns area_code."""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = area_code.get_country_code()
 
-    @pytest.mark.parametrize(
-        "area_code",
-        [
-            AreaCode.NORDIC,  # No country code in regional area
-            AreaCode.CONTINENTAL_EUROPE,  # Continental region
-        ],
-    )
-    def test_get_country_code_no_match(self, area_code: AreaCode) -> None:
-        """Test that regional codes return None."""
-        assert area_code.get_country_code() is None
+            # Check deprecation warning was issued
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "get_country_code() is deprecated" in str(w[0].message)
+            assert "Use the area_code property instead" in str(w[0].message)
+
+            # Check it returns the area_code (new behavior)
+            assert result == expected_country
+
+    def test_get_country_code_regional_areas_now_return_area_code(self) -> None:
+        """Test that regional codes now return their area_code instead of None."""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+
+            # These now return their area_code instead of None
+            assert AreaCode.NORDIC.get_country_code() == "Nordic"
+            assert (
+                AreaCode.CONTINENTAL_EUROPE.get_country_code() == "Continental Europe"
+            )
+
+            # Verify warnings were issued
+            assert len(w) == 2
+            for warning in w:
+                assert issubclass(warning.category, DeprecationWarning)
 
 
 class TestAreaCodeAreaTypes:
@@ -128,10 +195,12 @@ class TestAreaCodeBasicProperties:
         assert hasattr(france, "code")
         assert hasattr(france, "area_types")
         assert hasattr(france, "description")
+        assert hasattr(france, "area_code")
 
         assert isinstance(france.code, str)
         assert isinstance(france.area_types, str)
         assert isinstance(france.description, str)
+        assert isinstance(france.area_code, str)
 
     def test_area_code_values(self) -> None:
         """Test specific known values."""
