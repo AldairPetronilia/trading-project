@@ -4,6 +4,7 @@ from app.collectors.entsoe_collector import EntsoeCollector
 from app.config.database import Database
 from app.config.settings import BackfillConfig, Settings
 from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
+from app.repositories.backfill_progress_repository import BackfillProgressRepository
 from app.repositories.energy_data_repository import EnergyDataRepository
 from app.services.backfill_service import BackfillService
 from app.services.entsoe_data_service import EntsoEDataService
@@ -36,6 +37,11 @@ class Container(containers.DeclarativeContainer):
         database=database,
     )
 
+    backfill_progress_repository = providers.Factory(
+        BackfillProgressRepository,
+        database=database,
+    )
+
     gl_market_document_processor = providers.Factory(
         GlMarketDocumentProcessor,
     )
@@ -54,4 +60,5 @@ class Container(containers.DeclarativeContainer):
         repository=energy_data_repository,
         database=database,
         config=providers.Callable(lambda c: c.backfill, config),
+        progress_repository=backfill_progress_repository,
     )

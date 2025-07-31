@@ -10,7 +10,7 @@ class CollectorError(Exception):
     and provide consistent error handling across all data collection operations.
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         message: str,
         *,
@@ -95,7 +95,7 @@ class CollectorConfigurationError(CollectorError):
     """
 
 
-def map_http_error_to_collector_error(  # noqa: PLR0913, PLR0911
+def map_http_error_to_collector_error(  # noqa: PLR0911
     status_code: int,
     response_body: str | None = None,
     headers: dict[str, str] | None = None,
@@ -235,7 +235,7 @@ def create_timeout_error(
     )
 
 
-def create_data_format_error(  # noqa: PLR0913
+def create_data_format_error(
     format_issue: str,
     expected_format: str | None = None,
     received_format: str | None = None,

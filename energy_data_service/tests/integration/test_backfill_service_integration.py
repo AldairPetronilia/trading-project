@@ -34,6 +34,7 @@ from app.exceptions.collector_exceptions import CollectorError
 from app.models.backfill_progress import BackfillProgress, BackfillStatus
 from app.models.base import Base
 from app.models.load_data import EnergyDataPoint, EnergyDataType
+from app.repositories.backfill_progress_repository import BackfillProgressRepository
 from app.repositories.energy_data_repository import EnergyDataRepository
 from app.services.backfill_service import (
     BackfillResult,
@@ -169,6 +170,14 @@ async def initialized_database(database: Database) -> AsyncGenerator[Database]:
 async def energy_repository(initialized_database: Database) -> EnergyDataRepository:
     """Create EnergyDataRepository with initialized database."""
     return EnergyDataRepository(initialized_database)
+
+
+@pytest_asyncio.fixture
+async def backfill_progress_repository(
+    initialized_database: Database,
+) -> BackfillProgressRepository:
+    """Create BackfillProgressRepository with initialized database."""
+    return BackfillProgressRepository(initialized_database)
 
 
 def create_historical_gl_market_document(
@@ -327,6 +336,7 @@ def mock_collector(mock_historical_entsoe_responses: dict) -> AsyncMock:
 async def backfill_service_with_real_db(
     mock_collector: AsyncMock,
     energy_repository: EnergyDataRepository,
+    backfill_progress_repository: BackfillProgressRepository,
     container: Container,
     initialized_database: Database,
     backfill_config: BackfillConfig,
@@ -342,6 +352,7 @@ async def backfill_service_with_real_db(
         repository=energy_repository,
         database=initialized_database,
         config=backfill_config,
+        progress_repository=backfill_progress_repository,
     )
 
 

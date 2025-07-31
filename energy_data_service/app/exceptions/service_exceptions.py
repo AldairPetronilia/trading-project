@@ -40,7 +40,7 @@ class ServiceError(Exception):
         timing_info: Performance timing data when available
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         message: str,
         *,
@@ -228,7 +228,7 @@ class ChunkingError(ServiceError):
         failed_chunk_index: Index of the chunk that failed
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         message: str,
         *,

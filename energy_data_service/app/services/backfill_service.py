@@ -53,6 +53,9 @@ if TYPE_CHECKING:
     from app.processors.gl_market_document_processor import (
         GlMarketDocumentProcessor,
     )
+    from app.repositories.backfill_progress_repository import (
+        BackfillProgressRepository,
+    )
     from app.repositories.energy_data_repository import (
         EnergyDataRepository,
     )
@@ -213,6 +216,7 @@ class BackfillService:
         repository: EnergyDataRepository,
         database: Database,
         config: BackfillConfig,
+        progress_repository: BackfillProgressRepository,
     ) -> None:
         """
         Initialize the backfill service.
@@ -223,12 +227,14 @@ class BackfillService:
             repository: Energy data repository instance
             database: Database instance for session management
             config: Backfill configuration settings
+            progress_repository: Repository for backfill progress operations
         """
         self._collector = collector
         self._processor = processor
         self._repository = repository
         self._database = database
         self._config = config
+        self._progress_repository = progress_repository
         self._active_operations: dict[str, BackfillProgress] = {}
 
     async def analyze_coverage(
@@ -535,44 +541,20 @@ class BackfillService:
 
     async def list_active_backfills(self) -> list[dict[str, Any]]:
         """
-        List all currently active backfill operations.
+        List all currently active backfill operations using repository pattern.
 
         Returns:
             List of active backfill operation summaries
         """
         try:
-            # Query database for active backfills
-            summaries = []
-            async for session in self._database.get_database_session():
-                stmt = select(BackfillProgressModel).where(
-                    BackfillProgressModel.status.in_(
-                        [BackfillStatus.PENDING, BackfillStatus.IN_PROGRESS]
-                    )
-                )
-                result = await session.execute(stmt)
-                active_progresses = result.scalars().all()
+            # Use repository specialized method for active backfills
+            active_progresses = await self._progress_repository.get_active_backfills()
 
-                # Convert to summary format
-                progress_summaries = [
-                    {
-                        "backfill_id": progress.id,
-                        "area_code": progress.area_code,
-                        "endpoint_name": progress.endpoint_name,
-                        "status": progress.status.value,
-                        "progress_percentage": float(progress.progress_percentage),
-                        "started_at": progress.started_at.isoformat()
-                        if progress.started_at
-                        else None,
-                        "estimated_completion": (
-                            progress.estimated_completion.isoformat()
-                            if progress.estimated_completion
-                            else None
-                        ),
-                    }
-                    for progress in active_progresses
-                ]
-                summaries.extend(progress_summaries)
-                break  # Exit after first (and only) session
+            # Convert to summary format
+            return [
+                self._format_progress_summary(progress)
+                for progress in active_progresses
+            ]
 
         except Exception as e:
             msg = f"Failed to list active backfills: {e}"
@@ -580,8 +562,26 @@ class BackfillService:
                 message=msg,
                 progress_operation="list_active",
             ) from e
-        else:
-            return summaries
+
+    def _format_progress_summary(self, progress: BackfillProgress) -> dict[str, Any]:
+        """Format backfill progress into summary dictionary."""
+        return {
+            "backfill_id": progress.id,
+            "area_code": progress.area_code,
+            "endpoint_name": progress.endpoint_name,
+            "status": progress.status.value,
+            "progress_percentage": float(progress.progress_percentage),
+            "completed_chunks": progress.completed_chunks,
+            "total_chunks": progress.total_chunks,
+            "total_data_points": progress.total_data_points,
+            "failed_chunks": progress.failed_chunks,
+            "started_at": progress.started_at.isoformat()
+            if progress.started_at
+            else None,
+            "estimated_completion": progress.estimated_completion.isoformat()
+            if progress.estimated_completion
+            else None,
+        }
 
     # Private helper methods
 
@@ -720,17 +720,15 @@ class BackfillService:
             return progress
 
     async def _save_progress(self, progress: BackfillProgress) -> None:
-        """Save backfill progress to database."""
+        """Save backfill progress to database using repository pattern."""
         try:
-            async for session in self._database.get_database_session():
-                if progress.id:
-                    # Update existing record - use merge to handle cross-session object
-                    await session.merge(progress)
-                else:
-                    # Create new record
-                    session.add(progress)
-                await session.commit()
-                break  # Exit after first (and only) session
+            if progress.id:
+                # Update existing record - eliminates session.merge() technical debt
+                await self._progress_repository.update(progress)
+            else:
+                # Create new record and update with generated ID
+                created_progress = await self._progress_repository.create(progress)
+                progress.id = created_progress.id
         except Exception as e:
             msg = f"Failed to save backfill progress for {progress.area_code}/{progress.endpoint_name}"
             raise BackfillProgressError(
@@ -743,22 +741,13 @@ class BackfillService:
             ) from e
 
     async def _load_backfill_progress(self, backfill_id: int) -> BackfillProgress:
-        """Load backfill progress from database."""
+        """Load backfill progress from database using repository pattern."""
         try:
-            # Since BackfillProgress doesn't inherit from base repository pattern,
-            # we need to query it directly
-            progress: BackfillProgress | None = None
-            async for session in self._database.get_database_session():
-                stmt = select(BackfillProgressModel).where(
-                    BackfillProgressModel.id == backfill_id
-                )
-                result = await session.execute(stmt)
-                progress = result.scalar_one_or_none()
-                break  # Exit after first session
-
+            progress = await self._progress_repository.get_by_id(backfill_id)
             if not progress:
                 self._raise_progress_not_found_error(backfill_id)
-
+            else:
+                return progress
         except BackfillProgressError:
             raise
         except Exception as e:
@@ -769,8 +758,6 @@ class BackfillService:
                 progress_operation="load",
                 database_error=e,
             ) from e
-        else:
-            return progress
 
     async def _execute_backfill(
         self, progress: BackfillProgress, *, resume: bool = False

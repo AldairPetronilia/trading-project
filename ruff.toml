@@ -5,7 +5,7 @@ indent-width = 4
 
 [lint]
 select = ["E", "F", "W", "C90", "I", "N", "UP", "YTT", "S", "BLE", "FBT", "B", "A", "COM", "C4", "DTZ", "T10", "EM", "EXE", "FA", "ISC", "ICN", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "INT", "ARG", "PTH", "TD", "FIX", "ERA", "PD", "PGH", "PL", "TRY", "FLY", "NPY", "AIR", "PERF", "FURB", "LOG", "RUF"]
-ignore = ["E501", "F401", "F811", "COM812"]
+ignore = ["E501", "F401", "F811", "COM812", "PLR0913"]
 
 [lint.per-file-ignores]
 "*/tests/**/*.py" = ["S101", "SLF001", "S106", "S105", "PLR2004", "PLC0415"]

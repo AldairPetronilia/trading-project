@@ -43,7 +43,7 @@ class TestEntsoeCollector:
         return AsyncMock(spec=GlMarketDocument)
 
     @pytest.mark.asyncio
-    async def test_get_actual_total_load_delegates_to_client(  # noqa: PLR0913
+    async def test_get_actual_total_load_delegates_to_client(
         self,
         entsoe_collector: EntsoeCollector,
         mock_entsoe_client: AsyncMock,
@@ -71,7 +71,7 @@ class TestEntsoeCollector:
         assert result == mock_gl_market_document
 
     @pytest.mark.asyncio
-    async def test_get_actual_total_load_with_offset(  # noqa: PLR0913
+    async def test_get_actual_total_load_with_offset(
         self,
         entsoe_collector: EntsoeCollector,
         mock_entsoe_client: AsyncMock,
@@ -100,7 +100,7 @@ class TestEntsoeCollector:
         assert result == mock_gl_market_document
 
     @pytest.mark.asyncio
-    async def test_get_day_ahead_load_forecast_delegates_to_client(  # noqa: PLR0913
+    async def test_get_day_ahead_load_forecast_delegates_to_client(
         self,
         entsoe_collector: EntsoeCollector,
         mock_entsoe_client: AsyncMock,
@@ -130,7 +130,7 @@ class TestEntsoeCollector:
         assert result == mock_gl_market_document
 
     @pytest.mark.asyncio
-    async def test_get_week_ahead_load_forecast_delegates_to_client(  # noqa: PLR0913
+    async def test_get_week_ahead_load_forecast_delegates_to_client(
         self,
         entsoe_collector: EntsoeCollector,
         mock_entsoe_client: AsyncMock,
@@ -160,7 +160,7 @@ class TestEntsoeCollector:
         assert result == mock_gl_market_document
 
     @pytest.mark.asyncio
-    async def test_get_month_ahead_load_forecast_delegates_to_client(  # noqa: PLR0913
+    async def test_get_month_ahead_load_forecast_delegates_to_client(
         self,
         entsoe_collector: EntsoeCollector,
         mock_entsoe_client: AsyncMock,
@@ -190,7 +190,7 @@ class TestEntsoeCollector:
         assert result == mock_gl_market_document
 
     @pytest.mark.asyncio
-    async def test_get_year_ahead_load_forecast_delegates_to_client(  # noqa: PLR0913
+    async def test_get_year_ahead_load_forecast_delegates_to_client(
         self,
         entsoe_collector: EntsoeCollector,
         mock_entsoe_client: AsyncMock,
@@ -220,7 +220,7 @@ class TestEntsoeCollector:
         assert result == mock_gl_market_document
 
     @pytest.mark.asyncio
-    async def test_get_year_ahead_forecast_margin_delegates_to_client(  # noqa: PLR0913
+    async def test_get_year_ahead_forecast_margin_delegates_to_client(
         self,
         entsoe_collector: EntsoeCollector,
         mock_entsoe_client: AsyncMock,

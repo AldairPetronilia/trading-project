@@ -65,6 +65,11 @@ class TestBackfillService:
         return database
 
     @pytest.fixture
+    def mock_progress_repository(self) -> AsyncMock:
+        """Create a mock progress repository."""
+        return AsyncMock()
+
+    @pytest.fixture
     def backfill_config(self) -> BackfillConfig:
         """Create a backfill configuration."""
         return BackfillConfig(
@@ -84,6 +89,7 @@ class TestBackfillService:
         mock_repository: AsyncMock,
         mock_database: AsyncMock,
         backfill_config: BackfillConfig,
+        mock_progress_repository: AsyncMock,
     ) -> BackfillService:
         """Create a BackfillService with mocked dependencies."""
         return BackfillService(
@@ -92,6 +98,7 @@ class TestBackfillService:
             repository=mock_repository,
             database=mock_database,
             config=backfill_config,
+            progress_repository=mock_progress_repository,
         )
 
     @pytest.fixture
@@ -205,7 +212,7 @@ class TestBackfillService:
     # Backfill Operation Tests
 
     @pytest.mark.asyncio
-    async def test_start_backfill_success(  # noqa: PLR0913
+    async def test_start_backfill_success(
         self,
         backfill_service: BackfillService,
         mock_collector: AsyncMock,
@@ -312,7 +319,7 @@ class TestBackfillService:
         mock_collector: AsyncMock,
         mock_processor: AsyncMock,
         mock_repository: AsyncMock,
-        mock_database: AsyncMock,
+        mock_progress_repository: AsyncMock,
     ) -> None:
         """Test successful backfill resume operation."""
         # Mock progress record that can be resumed
@@ -331,19 +338,8 @@ class TestBackfillService:
             rate_limit_delay=Decimal("1.0"),
         )
 
-        # Mock database session to return progress
-        async def mock_session_with_progress() -> AsyncGenerator[AsyncMock]:
-            session = AsyncMock()
-            # Create a mock result that returns our progress synchronously
-            mock_result = MagicMock()
-            mock_result.scalar_one_or_none.return_value = mock_progress
-            session.execute.return_value = mock_result
-            try:
-                yield session
-            finally:
-                pass
-
-        mock_database.get_database_session = mock_session_with_progress
+        # Mock progress repository to return progress
+        mock_progress_repository.get_by_id.return_value = mock_progress
 
         # Mock collector and processor
         mock_collector.get_actual_total_load.return_value = MagicMock()
@@ -367,7 +363,7 @@ class TestBackfillService:
     async def test_resume_backfill_cannot_be_resumed(
         self,
         backfill_service: BackfillService,
-        mock_database: AsyncMock,
+        mock_progress_repository: AsyncMock,
     ) -> None:
         """Test resume backfill when operation cannot be resumed."""
         # Mock progress record that cannot be resumed
@@ -384,19 +380,8 @@ class TestBackfillService:
             rate_limit_delay=Decimal("1.0"),
         )
 
-        # Mock database session to return progress
-        async def mock_session_with_progress() -> AsyncGenerator[AsyncMock]:
-            session = AsyncMock()
-            # Create a mock result that returns our progress synchronously
-            mock_result = MagicMock()
-            mock_result.scalar_one_or_none.return_value = mock_progress
-            session.execute.return_value = mock_result
-            try:
-                yield session
-            finally:
-                pass
-
-        mock_database.get_database_session = mock_session_with_progress
+        # Mock progress repository to return progress
+        mock_progress_repository.get_by_id.return_value = mock_progress
 
         with pytest.raises(BackfillProgressError) as exc_info:
             await backfill_service.resume_backfill(backfill_id=1)
@@ -409,23 +394,12 @@ class TestBackfillService:
     async def test_resume_backfill_not_found(
         self,
         backfill_service: BackfillService,
-        mock_database: AsyncMock,
+        mock_progress_repository: AsyncMock,
     ) -> None:
         """Test resume backfill when progress record is not found."""
 
-        # Mock database session to return None
-        async def mock_session_with_none() -> AsyncGenerator[AsyncMock]:
-            session = AsyncMock()
-            # Create a mock result that returns None synchronously
-            mock_result = MagicMock()
-            mock_result.scalar_one_or_none.return_value = None
-            session.execute.return_value = mock_result
-            try:
-                yield session
-            finally:
-                pass
-
-        mock_database.get_database_session = mock_session_with_none
+        # Mock progress repository to return None
+        mock_progress_repository.get_by_id.return_value = None
 
         with pytest.raises(BackfillProgressError) as exc_info:
             await backfill_service.resume_backfill(backfill_id=999)
@@ -440,7 +414,7 @@ class TestBackfillService:
     async def test_get_backfill_status_success(
         self,
         backfill_service: BackfillService,
-        mock_database: AsyncMock,
+        mock_progress_repository: AsyncMock,
     ) -> None:
         """Test getting backfill status successfully."""
         # Mock progress record
@@ -461,19 +435,8 @@ class TestBackfillService:
             started_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         )
 
-        # Mock database session to return progress
-        async def mock_session_with_progress() -> AsyncGenerator[AsyncMock]:
-            session = AsyncMock()
-            # Create a mock result that returns our progress synchronously
-            mock_result = MagicMock()
-            mock_result.scalar_one_or_none.return_value = mock_progress
-            session.execute.return_value = mock_result
-            try:
-                yield session
-            finally:
-                pass
-
-        mock_database.get_database_session = mock_session_with_progress
+        # Mock progress repository to return progress
+        mock_progress_repository.get_by_id.return_value = mock_progress
 
         status = await backfill_service.get_backfill_status(backfill_id=1)
 
@@ -492,9 +455,9 @@ class TestBackfillService:
     async def test_list_active_backfills_success(
         self,
         backfill_service: BackfillService,
-        mock_database: AsyncMock,
+        mock_progress_repository: AsyncMock,
     ) -> None:
-        """Test listing active backfills successfully."""
+        """Test listing active backfills successfully using repository pattern."""
         # Mock active progress records
         mock_progresses = [
             BackfillProgress(
@@ -505,6 +468,10 @@ class TestBackfillService:
                 period_end=datetime(2022, 2, 1, tzinfo=UTC),
                 status=BackfillStatus.IN_PROGRESS,
                 progress_percentage=Decimal("25.00"),
+                completed_chunks=2,
+                total_chunks=8,
+                total_data_points=500,
+                failed_chunks=0,
                 chunk_size_days=7,
                 rate_limit_delay=Decimal("1.0"),
                 started_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -517,26 +484,17 @@ class TestBackfillService:
                 period_end=datetime(2022, 2, 1, tzinfo=UTC),
                 status=BackfillStatus.PENDING,
                 progress_percentage=Decimal("0.00"),
+                completed_chunks=0,
+                total_chunks=8,
+                total_data_points=0,
+                failed_chunks=0,
                 chunk_size_days=7,
                 rate_limit_delay=Decimal("1.0"),
             ),
         ]
 
-        # Mock database session to return progress records
-        async def mock_session_with_progresses() -> AsyncGenerator[AsyncMock]:
-            session = AsyncMock()
-            # Create a mock result that returns our progresses synchronously
-            mock_scalars = MagicMock()
-            mock_scalars.all.return_value = mock_progresses
-            mock_result = MagicMock()
-            mock_result.scalars.return_value = mock_scalars
-            session.execute.return_value = mock_result
-            try:
-                yield session
-            finally:
-                pass
-
-        mock_database.get_database_session = mock_session_with_progresses
+        # Mock repository method instead of direct database access
+        mock_progress_repository.get_active_backfills.return_value = mock_progresses
 
         summaries = await backfill_service.list_active_backfills()
 
@@ -562,25 +520,11 @@ class TestBackfillService:
     async def test_list_active_backfills_empty(
         self,
         backfill_service: BackfillService,
-        mock_database: AsyncMock,
+        mock_progress_repository: AsyncMock,
     ) -> None:
-        """Test listing active backfills when none exist."""
-
-        # Mock database session to return empty list
-        async def mock_session_with_empty_list() -> AsyncGenerator[AsyncMock]:
-            session = AsyncMock()
-            # Create a mock result that returns empty list synchronously
-            mock_scalars = MagicMock()
-            mock_scalars.all.return_value = []
-            mock_result = MagicMock()
-            mock_result.scalars.return_value = mock_scalars
-            session.execute.return_value = mock_result
-            try:
-                yield session
-            finally:
-                pass
-
-        mock_database.get_database_session = mock_session_with_empty_list
+        """Test listing active backfills when none exist using repository pattern."""
+        # Mock repository method to return empty list
+        mock_progress_repository.get_active_backfills.return_value = []
 
         summaries = await backfill_service.list_active_backfills()
 

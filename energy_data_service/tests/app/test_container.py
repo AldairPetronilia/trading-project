@@ -8,6 +8,7 @@ from app.config.database import Database
 from app.config.settings import Settings
 from app.container import Container
 from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
+from app.repositories.backfill_progress_repository import BackfillProgressRepository
 from app.repositories.energy_data_repository import EnergyDataRepository
 
 
@@ -38,6 +39,7 @@ class TestContainer:
         assert hasattr(container, "entsoe_client")
         assert hasattr(container, "entsoe_collector")
         assert hasattr(container, "energy_data_repository")
+        assert hasattr(container, "backfill_progress_repository")
         assert hasattr(container, "gl_market_document_processor")
 
     @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
@@ -206,3 +208,84 @@ class TestContainer:
         # Verify dependency relationships
         assert database.config is config
         assert repository.database is database
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_backfill_progress_repository_provider_creation(self) -> None:
+        """Test that backfill progress repository provider creates repository instance."""
+        container = Container()
+
+        repository = container.backfill_progress_repository()
+
+        assert isinstance(repository, BackfillProgressRepository)
+        assert repository.database is container.database()
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_backfill_progress_repository_dependency_injection(self) -> None:
+        """Test that backfill progress repository receives proper database dependency."""
+        container = Container()
+
+        # Get instances
+        database = container.database()
+        repository = container.backfill_progress_repository()
+
+        # Verify repository received the same database instance
+        assert repository.database is database
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_repository_providers_independence(self) -> None:
+        """Test that different repository providers are independent but share database."""
+        container = Container()
+
+        # Get instances
+        database = container.database()
+        energy_repository = container.energy_data_repository()
+        progress_repository = container.backfill_progress_repository()
+
+        # Verify they are different instances
+        assert energy_repository is not progress_repository
+
+        # But they share the same database instance
+        assert energy_repository.database is database
+        assert progress_repository.database is database
+        assert energy_repository.database is progress_repository.database
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_backfill_service_provider_with_progress_repository(self) -> None:
+        """Test that backfill service provider includes progress repository dependency."""
+        container = Container()
+
+        # Get backfill service (which should have progress repository injected)
+        backfill_service = container.backfill_service()
+
+        # Verify service has progress repository
+        assert hasattr(backfill_service, "_progress_repository")
+        assert isinstance(
+            backfill_service._progress_repository, BackfillProgressRepository
+        )
+
+        # Verify the repository has the same database as other providers
+        assert backfill_service._progress_repository.database is container.database()
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_all_providers_resolution_including_progress_repository(self) -> None:
+        """Test that all providers including new progress repository can be resolved."""
+        container = Container()
+
+        # Verify all providers can be instantiated
+        config = container.config()
+        database = container.database()
+        energy_repository = container.energy_data_repository()
+        progress_repository = container.backfill_progress_repository()
+        processor = container.gl_market_document_processor()
+
+        # Basic type checks
+        assert isinstance(config, Settings)
+        assert isinstance(database, Database)
+        assert isinstance(energy_repository, EnergyDataRepository)
+        assert isinstance(progress_repository, BackfillProgressRepository)
+        assert isinstance(processor, GlMarketDocumentProcessor)
+
+        # Verify dependency relationships
+        assert database.config is config
+        assert energy_repository.database is database
+        assert progress_repository.database is database
