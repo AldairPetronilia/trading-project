@@ -37,7 +37,14 @@ def database_config(postgres_container: PostgresContainer) -> DatabaseConfig:
 @pytest.fixture
 def settings(database_config: DatabaseConfig) -> Settings:
     """Create Settings with testcontainer database config."""
-    return Settings(database=database_config, debug=True)
+    from app.config.settings import EntsoEClientConfig
+    from pydantic import SecretStr
+
+    return Settings(
+        database=database_config,
+        debug=True,
+        entsoe_client=EntsoEClientConfig(api_token=SecretStr("test_token_1234567890")),
+    )
 
 
 @pytest.fixture

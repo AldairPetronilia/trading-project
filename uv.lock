@@ -195,7 +195,7 @@ wheels = [
 [[package]]
 name = "energy-data-service"
 version = "0.1.0"
-source = { virtual = "energy_data_service" }
+source = { editable = "energy_data_service" }
 dependencies = [
     { name = "alembic" },
     { name = "apscheduler" },
