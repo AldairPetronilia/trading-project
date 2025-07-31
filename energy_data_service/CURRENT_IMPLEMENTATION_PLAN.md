@@ -1,327 +1,360 @@
-# Current Implementation Plan - BackfillProgressRepository
+# Current Implementation Plan - API Layer
 
-## Next Atomic Step: Implement BackfillProgressRepository Pattern
+## Next Atomic Step: FastAPI REST Endpoints Implementation
 
-Based on the completed Service Orchestration Layer, the next step is implementing a proper repository pattern for BackfillProgress operations to resolve technical debt and improve architectural consistency.
+Based on the completed Service Orchestration Layer, the next step is implementing the FastAPI REST API endpoints that expose the production-ready data collection and backfill services via HTTP API for consumption by other microservices.
 
 ### What to implement next:
 
-1. **BackfillProgressRepository** (`app/repositories/backfill_progress_repository.py`)
-   - Inherit from BaseRepository[BackfillProgress] for type safety
-   - Implement required abstract methods (get_by_id, get_all, delete)
-   - Add specialized query methods for backfill operations
-   - Provide clean session management without cross-session object issues
+1. **FastAPI Application Factory** (`app/api/main.py`)
+   - FastAPI app creation with container integration
+   - Global middleware setup (CORS, error handling, logging)
+   - Router registration and OpenAPI documentation
+   - Application lifecycle management with container
 
-2. **BackfillService Refactoring** (`app/services/backfill_service.py`)
-   - Replace direct database operations with repository calls
-   - Remove session.merge() workaround for cross-session objects
-   - Add backfill_progress_repository dependency injection
-   - Maintain existing business logic while improving data access layer
+2. **API Middleware Layer** (`app/api/middleware/`)
+   - CORS configuration for microservices communication
+   - Global exception handling with HTTP status mapping
+   - Request/response logging for monitoring and debugging
+   - Error response standardization across all endpoints
 
-3. **Container Integration** (`app/container.py`)
-   - Add BackfillProgressRepository provider using Factory pattern
-   - Update BackfillService provider with new repository dependency
-   - Maintain proper dependency injection chain
+3. **Pydantic Schema Definitions** (`app/api/v1/schemas/`)
+   - Request/response models for all API endpoints
+   - Data validation schemas with field constraints
+   - Enum definitions for API constants and types
+   - Common schemas for pagination, errors, and metadata
 
-4. **Test Suite Implementation** (`tests/app/repositories/test_backfill_progress_repository.py`)
-   - Unit tests for all repository operations with mocked sessions
-   - Integration tests with real database operations
-   - Error handling and edge case coverage
-   - Performance testing for specialized queries
+4. **REST API Endpoints** (`app/api/v1/endpoints/`)
+   - Load data query endpoints with advanced filtering
+   - Backfill management endpoints for historical data operations
+   - Collection trigger endpoints for manual data collection
+   - Health check and monitoring endpoints for system status
+   - Area metadata endpoints for supported regions
 
 ### Implementation Requirements:
 
-#### BackfillProgressRepository Features:
-- **Core CRUD Operations**: Implement get_by_id, get_all, delete methods from BaseRepository
-- **Specialized Queries**: get_active_backfills() for pending/in_progress operations
-- **Area/Endpoint Filtering**: get_by_area_endpoint() for targeted backfill queries
-- **Resumable Operations**: get_resumable_backfills() for failed operations with progress
-- **Progress Updates**: update_progress_by_id() with fresh object query pattern
-- **Session Management**: Proper async session handling without cross-session object attachment
+#### FastAPI Application Factory Features:
+- **Container Integration**: Direct dependency injection using existing app.container pattern
+- **OpenAPI Documentation**: Auto-generated comprehensive API documentation with examples
+- **Error Handling**: Global exception handlers mapping service exceptions to HTTP responses
+- **Middleware Setup**: CORS, logging, and request/response middleware configuration
+- **Lifecycle Management**: Startup and shutdown events for resource management
+- **Version Management**: API versioning support with v1 prefix and future expansion capability
 
-#### BackfillService Refactoring Features:
-- **Repository Integration**: Replace _save_progress() direct database calls with repository.create/update
-- **Load Operations**: Replace _load_backfill_progress() with repository.get_by_id()
-- **Active Backfills**: Replace list_active_backfills() queries with repository.get_active_backfills()
-- **Constructor Updates**: Add progress_repository dependency parameter
-- **Error Handling**: Propagate repository exceptions through service layer
-- **Session Elimination**: Remove direct database session management for progress operations
+#### API Middleware Layer Features:
+- **CORS Configuration**: Microservices-friendly CORS setup for Strategy/Portfolio/Risk services
+- **Exception Mapping**: Automatic conversion of service exceptions to appropriate HTTP status codes
+- **Request Logging**: Structured logging of all API requests with timing and metadata
+- **Response Standardization**: Consistent error response format across all endpoints
+- **Security Headers**: Basic security headers for API protection
+- **Rate Limiting**: Request rate limiting for API protection (future-ready)
 
-#### Container Integration Features:
-- **Provider Registration**: Add backfill_progress_repository Factory provider
-- **Dependency Chain**: Settings ’ Database ’ BackfillProgressRepository ’ BackfillService
-- **Service Updates**: Update backfill_service provider with progress_repository parameter
-- **Scoping Consistency**: Follow existing singleton/factory patterns
-- **Type Safety**: Maintain proper generic type annotations
-- **Lifecycle Management**: Proper resource cleanup through dependency injection
+#### Pydantic Schema Definitions Features:
+- **Request Validation**: Comprehensive input validation with clear error messages
+- **Response Models**: Type-safe response schemas with OpenAPI documentation
+- **Field Constraints**: Validation rules for dates, limits, area codes, and data types
+- **Enum Integration**: API enums matching database EnergyDataType and business types
+- **Pagination Support**: Standardized pagination schemas for large dataset queries
+- **Error Schemas**: Structured error response models with field-level validation errors
+
+#### REST API Endpoints Features:
+- **Load Data Queries**: GET /api/v1/load-data with filtering by area, time range, data type, and business type
+- **Latest Data Access**: GET /api/v1/load-data/latest for real-time data monitoring
+- **Data Summaries**: GET /api/v1/load-data/summary for aggregated analytics data
+- **Gap Analysis**: GET /api/v1/load-data/gaps for identifying missing data periods
+- **Backfill Management**: POST /api/v1/backfill/start, GET /api/v1/backfill/status, POST /api/v1/backfill/resume
+- **Collection Triggers**: POST /api/v1/collection/trigger for manual data collection
+- **Health Monitoring**: GET /api/v1/health with database and external API status checks
+- **System Metrics**: GET /api/v1/metrics for monitoring system performance and data volumes
 
 ### Test Coverage Requirements:
 
-1. **BackfillProgressRepository Unit Tests** (`tests/app/repositories/test_backfill_progress_repository.py`)
-   - Test all CRUD operations with mocked async sessions
-   - Test specialized query methods (active, resumable, by area/endpoint)
-   - Test error handling scenarios (database errors, constraint violations)
-   - Test batch operations and transaction boundaries
+1. **API Endpoint Tests** (`tests/api/v1/endpoints/`)
+   - Load data endpoint tests with various filtering combinations
+   - Backfill endpoint tests with operation lifecycle testing
+   - Collection endpoint tests with success and error scenarios
+   - Health endpoint tests with component status validation
+   - Error handling tests for all endpoints with invalid inputs
 
-2. **BackfillService Unit Tests Updates** (`tests/app/services/test_backfill_service.py`)
-   - Mock progress_repository dependency instead of direct database
-   - Verify repository method calls (create, update, get_by_id)
-   - Test error propagation from repository to service layer
-   - Maintain existing business logic test coverage
+2. **Schema Validation Tests** (`tests/api/v1/schemas/`)
+   - Request schema validation with valid and invalid inputs
+   - Response schema serialization with database model conversion
+   - Enum validation tests for all API enum types
+   - Pagination schema tests with various page sizes and offsets
+   - Error schema tests with validation error formatting
 
-3. **Container Unit Tests Updates** (`tests/app/test_container.py`)
-   - Test BackfillProgressRepository provider registration
-   - Test BackfillService provider with new repository dependency
-   - Test dependency resolution chain
-   - Test configuration injection
+3. **Middleware Tests** (`tests/api/middleware/`)
+   - CORS middleware tests with various origin configurations
+   - Error handling middleware tests with service exception mapping
+   - Logging middleware tests with request/response capture
+   - Authentication middleware tests (if implemented)
 
-4. **BackfillProgressRepository Integration Tests** (`tests/integration/test_backfill_progress_repository_integration.py`)
-   - Real TimescaleDB operations with testcontainers
-   - Test concurrent repository operations
-   - Test transaction isolation and rollback scenarios
-   - Test performance of specialized queries with real data
+4. **API Integration Tests** (`tests/integration/api/`)
+   - End-to-end API tests with real database and container
+   - Multi-endpoint workflow tests (trigger collection ’ query data)
+   - Error propagation tests from service layer to HTTP response
+   - Performance tests with large dataset pagination
+   - Concurrent request handling tests
 
-5. **BackfillService Integration Tests Updates** (`tests/integration/test_backfill_service_integration.py`)
-   - Update tests to use real BackfillProgressRepository instead of direct database
-   - Verify end-to-end functionality with repository pattern
-   - Maintain existing comprehensive integration test coverage
-   - Test session management improvements
+5. **OpenAPI Documentation Tests** (`tests/api/`)
+   - OpenAPI schema generation validation
+   - Documentation completeness tests for all endpoints
+   - Example validation tests for request/response schemas
+   - API client generation tests from OpenAPI specification
 
 ### Dependencies:
 
-- Builds on existing BaseRepository from `app/repositories/base_repository.py`
-- Uses BackfillProgress model from `app/models/backfill_progress.py`
-- Uses Database class from `app/config/database.py`
-- Uses repository exception hierarchy from `app/exceptions/repository_exceptions.py`
-- Integration with existing Container patterns from `app/container.py`
-- Follows established patterns from EnergyDataRepository implementation
+- Builds on existing Container from `app/container.py`
+- Uses EntsoEDataService from `app/services/entsoe_data_service.py`
+- Uses BackfillService from `app/services/backfill_service.py`
+- Uses EnergyDataRepository from `app/repositories/energy_data_repository.py`
+- Uses BackfillProgressRepository from `app/repositories/backfill_progress_repository.py`
+- Requires FastAPI and Uvicorn (already in pyproject.toml)
+- Integration with existing exception hierarchies from `app/exceptions/`
+- Future integration point for Strategy Service, Portfolio Service, and Risk Management Service
 
 ### Success Criteria:
 
-- **Technical Debt Resolution**: Eliminates session.merge() workaround and cross-session object attachment issues
-- **Testing Coverage**: Comprehensive unit and integration tests with 95%+ coverage for new repository
-- **Integration Success**: All existing BackfillService integration tests pass with repository pattern
-- **Performance Maintenance**: Repository operations perform equally or better than direct database calls
-- **Error Handling Consistency**: Repository exceptions properly propagate through service layer with context
-- **Code Quality Compliance**: Passes all checks (ruff, mypy, pre-commit) with zero type errors
-- **Architecture Consistency**: Follows established repository patterns from EnergyDataRepository
-- **Pattern Consistency**: Maintains clean separation between service logic and data access operations
+- **Complete REST API**: All endpoints functional with proper HTTP status codes and error handling
+- **Container Integration**: All services accessible via FastAPI dependency injection using existing container
+- **Comprehensive Testing**: API integration tests with real database demonstrating end-to-end functionality
+- **OpenAPI Documentation**: Auto-generated, comprehensive API documentation with examples and schemas
+- **Error Handling**: Consistent error responses with proper HTTP status codes and detailed error messages
+- **Code Quality**: Passes all checks (ruff, mypy, pre-commit) with zero type errors
+- **Performance Ready**: Handles large dataset queries with proper pagination and filtering
+- **Microservice Ready**: CORS configuration and JSON responses ready for other service consumption
 
-This BackfillProgressRepository implementation resolves documented technical debt while establishing proper repository pattern consistency needed for the upcoming API Layer implementation.
+This FastAPI REST API layer completes the Data Service microservice, providing clean HTTP interfaces for other services while leveraging all the production-ready service orchestration infrastructure.
 
 ---
 
 ## Further Implementation Details
 
-### = **Current Technical Debt Analysis**
+### = **Data Service Completion Analysis**
 
-#### **Root Cause of Issues:**
-The BackfillService currently contains a critical technical debt issue documented in the MVP architecture:
+#### **Current Architecture Status:**
+The project has completed the core service orchestration layer with production-ready data collection, processing, and storage capabilities. However, without REST API endpoints, other microservices cannot consume this data, creating an integration bottleneck.
 
-**Problem Location**: `app/services/backfill_service.py:722-733` (`_save_progress` method)
-
-**Current Problematic Code:**
+**Missing Integration Layer:**
 ```python
-async def _save_progress(self, progress: BackfillProgress) -> None:
-    async for session in self._database.get_database_session():
-        if progress.id:
-            #   WORKAROUND: Using merge() to handle cross-session objects
-            await session.merge(progress)  # This is inefficient and architectural debt
-        else:
-            session.add(progress)
-        await session.commit()
+# L CURRENT: Services exist but no HTTP interface
+EntsoEDataService  #  Production ready
+BackfillService    #  Production ready
+EnergyDataRepository  #  Production ready
+# But no way for Strategy Service to access this data via HTTP
 ```
 
-**Why This is Technical Debt:**
-1. **Cross-Session Object Attachment**: BackfillProgress objects are reused across multiple database sessions
-2. **SQLAlchemy "Already Attached" Errors**: Objects become attached to one session but used in another
-3. **Performance Overhead**: `session.merge()` is less efficient than proper session-scoped operations
-4. **Architectural Inconsistency**: Breaks the established repository pattern used elsewhere
+**Why This is a Critical Gap:**
+1. **Microservice Isolation**: Other services need HTTP interface to access data
+2. **Service Decoupling**: Direct database access violates microservice principles
+3. **API Contract**: External services need well-defined API contracts
+4. **Monitoring**: No way to monitor data service health from other services
 
-### =à **Detailed Repository Implementation Strategy**
+### =à **Detailed Implementation Strategy**
 
-#### **Session Management Solution:**
-Instead of reusing objects across sessions, the repository will:
+#### **Core Solution Approach:**
+Implement FastAPI REST endpoints that expose existing services through HTTP interface, following microservice architecture principles with proper dependency injection integration.
 
-**Current Problematic Pattern:**
+**New API Layer Pattern:**
 ```python
-# L WRONG: Reuse object across sessions
-progress = BackfillProgress(...)  # Created in one context
-# ... object gets attached to session A
-# Later used in different session B - causes conflicts
-await session.merge(progress)  # Workaround but inefficient
+#  CORRECT: HTTP interface exposing existing services
+@router.get("/api/v1/load-data")
+async def get_load_data(
+    params: LoadDataQuery = Depends(),
+    repository: EnergyDataRepository = Depends(lambda: app.container.energy_data_repository())
+) -> LoadDataResponse:
+    # Leverage existing repository with HTTP interface
+    data_points = await repository.get_by_time_range(
+        area_codes=params.area_codes,
+        start_time=params.start_time,
+        end_time=params.end_time,
+        data_types=params.data_types
+    )
+    return LoadDataResponse.from_data_points(data_points)
 ```
 
-**New Repository Pattern:**
-```python
-#  CORRECT: Fresh queries in current session
-async def update_progress_by_id(self, backfill_id: int, **updates) -> BackfillProgress:
-    async with self.database.session_factory() as session:
-        # Query fresh object in current session
-        stmt = select(BackfillProgress).where(BackfillProgress.id == backfill_id)
-        progress = await session.execute(stmt).scalar_one_or_none()
+#### **Detailed Component Implementation:**
 
-        if progress:
-            # Update fields directly on session-attached object
-            for field, value in updates.items():
-                setattr(progress, field, value)
-            await session.commit()
-            await session.refresh(progress)
-        return progress
+**FastAPI Application Factory:**
+```python
+# app/api/main.py
+def create_app() -> FastAPI:
+    container = Container()
+
+    app = FastAPI(
+        title="Energy Data Service",
+        description="Production-ready energy data collection and management API",
+        version="1.0.0"
+    )
+
+    # Store container for dependency injection
+    app.container = container
+
+    # Setup middleware
+    setup_cors(app)
+    setup_error_handlers(app, container)
+    setup_logging_middleware(app)
+
+    # Include API routes
+    app.include_router(api_v1_router, prefix="/api/v1")
+
+    return app
 ```
 
-#### **Specialized Repository Methods:**
-
+**Error Handling Middleware:**
 ```python
-class BackfillProgressRepository(BaseRepository[BackfillProgress]):
-
-    async def get_active_backfills(self) -> list[BackfillProgress]:
-        """Get all pending/in_progress backfills."""
-        async with self.database.session_factory() as session:
-            stmt = select(BackfillProgress).where(
-                BackfillProgress.status.in_([
-                    BackfillStatus.PENDING,
-                    BackfillStatus.IN_PROGRESS
-                ])
-            )
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-
-    async def get_resumable_backfills(self) -> list[BackfillProgress]:
-        """Get backfills that can be resumed (failed/pending with progress)."""
-        async with self.database.session_factory() as session:
-            stmt = select(BackfillProgress).where(
-                and_(
-                    BackfillProgress.status.in_([
-                        BackfillStatus.FAILED,
-                        BackfillStatus.PENDING
-                    ]),
-                    BackfillProgress.completed_chunks > 0
-                )
-            )
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-
-    async def get_by_area_endpoint(
-        self, area_code: str, endpoint_name: str
-    ) -> list[BackfillProgress]:
-        """Get backfills for specific area/endpoint combination."""
-        async with self.database.session_factory() as session:
-            stmt = select(BackfillProgress).where(
-                and_(
-                    BackfillProgress.area_code == area_code,
-                    BackfillProgress.endpoint_name == endpoint_name
-                )
-            ).order_by(desc(BackfillProgress.created_at))
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
+# app/api/middleware/error_handler.py
+@app.exception_handler(CollectionError)
+async def collection_error_handler(request: Request, exc: CollectionError):
+    return JSONResponse(
+        status_code=exc.get_http_status_code(),
+        content=APIError(
+            error_code="COLLECTION_ERROR",
+            message=str(exc),
+            details=exc.to_dict(),
+            timestamp=datetime.utcnow(),
+            trace_id=str(uuid4())
+        ).dict()
+    )
 ```
 
-### = **BackfillService Transformation**
+### = **Before/After Transformation**
 
-#### **Before (Technical Debt):**
+#### **Before (No HTTP Interface):**
 ```python
-class BackfillService:
-    def __init__(self, collector, processor, repository, database, config):
-        # Direct database dependency for progress operations
-        self._database = database
+# L Other services cannot access data
+# Strategy Service trying to get data:
+# - Must import energy_data_service directly
+# - Violates microservice boundaries
+# - Creates tight coupling
+# - No service discovery or load balancing
+# - No standardized error handling
 
-    async def _save_progress(self, progress: BackfillProgress) -> None:
-        # L Direct database session management with merge() workaround
-        async for session in self._database.get_database_session():
-            if progress.id:
-                await session.merge(progress)  # Technical debt
-            else:
-                session.add(progress)
-            await session.commit()
-
-    async def _load_backfill_progress(self, backfill_id: int) -> BackfillProgress:
-        # L Raw SQLAlchemy queries in service layer
-        async for session in self._database.get_database_session():
-            stmt = select(BackfillProgressModel).where(
-                BackfillProgressModel.id == backfill_id
-            )
-            result = await session.execute(stmt)
-            return result.scalar_one_or_none()
+from energy_data_service.app.services.entsoe_data_service import EntsoEDataService
+# Direct service dependency - bad for microservices!
 ```
 
-#### **After (Clean Repository Pattern):**
+#### **After (Clean HTTP API):**
 ```python
-class BackfillService:
-    def __init__(self, collector, processor, repository, database, config, progress_repository):
-        # Clean dependency injection with repository
-        self._progress_repository = progress_repository
+#  Strategy Service accessing data via HTTP API
+import httpx
 
-    async def _save_progress(self, progress: BackfillProgress) -> None:
-        #  Clean repository operations
-        if progress.id:
-            await self._progress_repository.update(progress)
-        else:
-            created_progress = await self._progress_repository.create(progress)
-            progress.id = created_progress.id  # Update with generated ID
+class StrategyDataClient:
+    def __init__(self, data_service_url: str):
+        self.client = httpx.AsyncClient(base_url=data_service_url)
 
-    async def _load_backfill_progress(self, backfill_id: int) -> BackfillProgress:
-        #  Simple repository call
-        progress = await self._progress_repository.get_by_id(backfill_id)
-        if not progress:
-            self._raise_progress_not_found_error(backfill_id)
-        return progress
-
-    async def list_active_backfills(self) -> list[dict[str, Any]]:
-        #  Use specialized repository method
-        active_progresses = await self._progress_repository.get_active_backfills()
-        return [self._format_progress_summary(p) for p in active_progresses]
+    async def get_load_data(self, area_codes: List[str], start_time: datetime, end_time: datetime):
+        response = await self.client.get(
+            "/api/v1/load-data",
+            params={
+                "area_codes": area_codes,
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat()
+            }
+        )
+        response.raise_for_status()
+        return LoadDataResponse.parse_obj(response.json())
 ```
 
 ### =Ê **Benefits Quantification**
 
-#### **Performance Improvements:**
-- **Session Efficiency**: Eliminates unnecessary `merge()` operations (20-30% faster for updates)
-- **Query Optimization**: Specialized repository methods reduce query complexity
-- **Memory Usage**: Proper session scoping reduces object retention
+#### **Integration Improvements:**
+- **Service Decoupling**: 100% elimination of direct service dependencies between microservices
+- **API Contract Clarity**: Well-defined OpenAPI specification for all data access patterns
+- **Error Handling**: Standardized HTTP error responses with structured error information
 
-#### **Code Quality Improvements:**
-- **Separation of Concerns**: Service focuses on business logic, repository handles data access
-- **Testability**: Repository can be easily mocked for unit testing
-- **Type Safety**: Full generic type support with `BaseRepository[BackfillProgress]`
-- **Error Handling**: Consistent exception patterns across all data operations
+#### **Development Velocity Improvements:**
+- **Parallel Development**: Other services can develop against API contracts without waiting for implementation
+- **Testing Efficiency**: API endpoints can be tested independently of service implementations
+- **Documentation Automation**: OpenAPI generates client SDKs and documentation automatically
 
-#### **Architectural Consistency:**
-- **Pattern Alignment**: Matches existing EnergyDataRepository implementation
-- **Dependency Injection**: Clean DI chain without direct database dependencies in services
-- **Future Extensibility**: Easy to add new query methods as features grow
+#### **Operational Improvements:**
+- **Service Monitoring**: Health endpoints enable monitoring of data service from external systems
+- **Load Balancing**: HTTP interface enables standard load balancing and service discovery
+- **Caching**: HTTP responses can be cached at various levels (API gateway, CDN, client)
 
 ### >ê **Comprehensive Testing Strategy**
 
-#### **Repository Unit Tests (New):**
+#### **Unit Tests Details:**
 ```python
-# tests/app/repositories/test_backfill_progress_repository.py
-class TestBackfillProgressRepository:
-    async def test_get_active_backfills_filters_correctly(self):
-        # Test that only PENDING/IN_PROGRESS are returned
+# tests/api/v1/endpoints/test_load_data.py
+class TestLoadDataEndpoints:
+    async def test_get_load_data_success(self, api_client, mock_repository):
+        # Mock repository response
+        mock_repository.get_by_time_range.return_value = [sample_energy_data_point]
 
-    async def test_get_resumable_backfills_has_progress(self):
-        # Test resumable logic with completed_chunks > 0
+        response = await api_client.get(
+            "/api/v1/load-data",
+            params={
+                "area_codes": ["DE"],
+                "start_time": "2025-01-01T00:00:00Z",
+                "end_time": "2025-01-01T23:59:59Z"
+            }
+        )
 
-    async def test_update_progress_by_id_fresh_object(self):
-        # Test that updates use fresh session objects
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["data"]) == 1
+        assert data["data"][0]["area_code"] == "DE"
 
-    async def test_concurrent_updates_no_session_conflicts(self):
-        # Test that concurrent operations don't have session issues
+    async def test_get_load_data_validation_error(self, api_client):
+        response = await api_client.get(
+            "/api/v1/load-data",
+            params={"area_codes": ["INVALID_CODE"]}  # Missing required dates
+        )
+
+        assert response.status_code == 422
+        error = response.json()
+        assert "start_time" in error["details"]["field_errors"]
 ```
 
-#### **Integration Tests (Enhanced):**
+#### **Integration Tests Details:**
 ```python
-# tests/integration/test_backfill_service_integration.py
-class TestBackfillServiceIntegration:
-    async def test_no_session_merge_workarounds_needed(self):
-        # Verify that the old technical debt is resolved
-        # Run through complete backfill lifecycle
-        # Ensure no SQLAlchemy session attachment errors
+# tests/integration/api/test_load_data_integration.py
+class TestLoadDataIntegration:
+    async def test_end_to_end_data_retrieval(self, api_client, postgres_container):
+        # Insert test data directly into database
+        await insert_test_energy_data(postgres_container)
 
-    async def test_repository_pattern_end_to_end(self):
-        # Test full workflow with repository pattern
-        # Verify same functionality as before but cleaner implementation
+        # Query via API
+        response = await api_client.get(
+            "/api/v1/load-data",
+            params={
+                "area_codes": ["DE", "FR"],
+                "start_time": "2025-01-01T00:00:00Z",
+                "end_time": "2025-01-01T23:59:59Z",
+                "limit": 1000
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify data structure and content
+        assert "data" in data
+        assert "pagination" in data
+        assert len(data["data"]) > 0
+        assert all(point["area_code"] in ["DE", "FR"] for point in data["data"])
 ```
 
-This detailed implementation plan resolves the specific technical debt while establishing a foundation for clean, maintainable data access patterns in the service layer.
+#### **Performance/Load Tests:**
+- **Large Dataset Pagination**: Test API with 10,000+ records ensuring sub-second response times
+- **Concurrent Request Handling**: Test 50+ concurrent requests maintaining < 500ms response times
+- **Memory Usage**: Ensure API memory usage remains stable under load with proper cleanup
+
+### <¯ **Migration/Rollout Strategy**
+
+#### **Implementation Phases:**
+1. **Phase 1**: Implement core API structure (main.py, middleware, basic endpoints)
+2. **Phase 2**: Implement all data query endpoints with comprehensive schema validation
+3. **Phase 3**: Implement backfill management and collection trigger endpoints
+
+#### **Backwards Compatibility:**
+- **Service Layer Unchanged**: Existing services remain unchanged, API is additive layer
+- **Database Schema Stable**: No database changes required, API uses existing models
+- **Container Integration**: API uses existing container without modifications
+
+#### **Risk Mitigation:**
+- **Gradual Rollout**: Deploy endpoints incrementally, testing each before proceeding
+- **Fallback Strategy**: If API issues occur, other services can temporarily use direct imports
+- **Monitoring**: Comprehensive health checks ensure API reliability before production use
