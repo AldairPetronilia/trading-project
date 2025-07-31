@@ -118,6 +118,127 @@ This [BRIEF DESCRIPTION OF PURPOSE] establishes [WHAT FOUNDATION/CAPABILITY IT P
 
 ---
 
+## Further Implementation Details
+
+### 🔍 **[Problem/Technical Debt Analysis Section]**
+
+#### **[Root Cause/Current Issues]:**
+[Detailed analysis of what problem this implementation solves. Include:]
+- Current technical debt or architectural issues
+- Specific code locations with problems (file:line references)
+- Performance bottlenecks or inefficiencies
+- Pattern inconsistencies or violations
+
+**[Current Problematic Code Example]:**
+```python
+# ❌ WRONG: [Description of what's wrong]
+[current_code_example]
+```
+
+**[Why This is Technical Debt/Problem]:**
+1. **[Issue 1]**: [Detailed explanation]
+2. **[Issue 2]**: [Detailed explanation]
+3. **[Issue 3]**: [Detailed explanation]
+
+### 🛠️ **[Detailed Implementation Strategy Section]**
+
+#### **[Core Solution Approach]:**
+[Explain the approach to solving the problem. Include:]
+
+**[New Pattern/Solution]:**
+```python
+# ✅ CORRECT: [Description of the solution]
+[solution_code_example]
+```
+
+#### **[Detailed Component Implementation]:**
+
+**[Component 1 Implementation Details]:**
+```python
+# [Component 1 implementation example with key methods]
+class [ComponentName]:
+    [method_examples_with_explanations]
+```
+
+**[Component 2 Implementation Details]:**
+```python
+# [Component 2 implementation example]
+[detailed_code_examples]
+```
+
+### 🔄 **[Before/After Transformation Section]**
+
+#### **Before ([Current Implementation]):**
+```python
+# ❌ [Current problematic pattern]
+[before_code_example_with_detailed_comments_on_issues]
+```
+
+#### **After ([New Clean Implementation]):**
+```python
+# ✅ [New clean pattern]
+[after_code_example_with_detailed_comments_on_improvements]
+```
+
+### 📊 **[Benefits Quantification Section]**
+
+#### **[Performance Improvements]:**
+- **[Metric 1]**: [Specific improvement with percentage/numbers]
+- **[Metric 2]**: [Specific improvement with percentage/numbers]
+- **[Metric 3]**: [Specific improvement with percentage/numbers]
+
+#### **[Code Quality Improvements]:**
+- **[Quality Aspect 1]**: [Detailed explanation of improvement]
+- **[Quality Aspect 2]**: [Detailed explanation of improvement]
+- **[Quality Aspect 3]**: [Detailed explanation of improvement]
+
+#### **[Architectural Improvements]:**
+- **[Architecture Aspect 1]**: [How it improves architecture]
+- **[Architecture Aspect 2]**: [How it improves architecture]
+- **[Architecture Aspect 3]**: [How it improves architecture]
+
+### 🧪 **[Comprehensive Testing Strategy Section]**
+
+#### **[Unit Tests Details]:**
+```python
+# [Detailed test examples]
+class Test[ComponentName]:
+    async def test_[specific_functionality](self):
+        # [Test implementation example]
+
+    async def test_[edge_case_or_error_scenario](self):
+        # [Test implementation example]
+```
+
+#### **[Integration Tests Details]:**
+```python
+# [Integration test examples]
+class Test[ComponentName]Integration:
+    async def test_[end_to_end_scenario](self):
+        # [Integration test example]
+```
+
+#### **[Performance/Load Tests]:**
+- **[Performance Test 1]**: [Description and expected results]
+- **[Performance Test 2]**: [Description and expected results]
+
+### 🎯 **[Migration/Rollout Strategy Section]**
+
+#### **[Implementation Phases]:**
+1. **[Phase 1]**: [What gets implemented first and why]
+2. **[Phase 2]**: [What gets implemented second and why]
+3. **[Phase 3]**: [What gets implemented last and why]
+
+#### **[Backwards Compatibility]:**
+- **[Compatibility Concern 1]**: [How it's addressed]
+- **[Compatibility Concern 2]**: [How it's addressed]
+
+#### **[Risk Mitigation]:**
+- **[Risk 1]**: [Mitigation strategy]
+- **[Risk 2]**: [Mitigation strategy]
+
+---
+
 ## Template Usage Notes
 
 ### Section Guidelines:
@@ -154,6 +275,15 @@ This [BRIEF DESCRIPTION OF PURPOSE] establishes [WHAT FOUNDATION/CAPABILITY IT P
 - Include code quality, testing, performance, and integration metrics
 - Always include code quality checks (ruff, mypy, pre-commit)
 - End with what foundation this provides for future work
+
+**Further Implementation Details**:
+- Use this section for complex implementations that need detailed analysis
+- Include problem analysis with specific code references (file:line)
+- Provide before/after code examples showing the transformation
+- Quantify benefits with specific metrics and percentages
+- Include detailed testing strategies with code examples
+- Add migration/rollout strategies for complex changes
+- Use emojis to organize sections for better readability
 
 ### Best Practices:
 
