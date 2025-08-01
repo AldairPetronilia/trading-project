@@ -591,6 +591,238 @@ def create_service_error_from_processor_error(
     )
 
 
+class SchedulerError(ServiceError):
+    """
+    Base exception for scheduler-related operations.
+
+    This exception serves as the base for all scheduler-related errors,
+    providing common functionality for job management, scheduling operations,
+    and scheduler state management error handling.
+
+    Attributes:
+        scheduler_operation: The scheduler operation that failed
+        job_id: Unique identifier for the scheduled job
+        job_context: Context information about the scheduled job
+        scheduler_state: Current state of the scheduler when error occurred
+    """
+
+    def __init__(
+        self,
+        message: str,
+        scheduler_operation: str | None = None,
+        job_id: str | None = None,
+        job_context: dict[str, Any] | None = None,
+        scheduler_state: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize scheduler error.
+
+        Args:
+            message: Human-readable error description
+            scheduler_operation: Operation that failed (e.g., 'start', 'stop', 'schedule_job')
+            job_id: Unique identifier for the scheduled job
+            job_context: Context information about the scheduled job
+            scheduler_state: Current state of the scheduler when error occurred
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, service_name="scheduler", **kwargs)
+        self.scheduler_operation = scheduler_operation or "unknown_operation"
+        self.job_id = job_id
+        self.job_context = job_context or {}
+        self.scheduler_state = scheduler_state or {}
+
+        # Add to context
+        self.context.update(
+            {
+                "scheduler_operation": self.scheduler_operation,
+                "job_id": job_id,
+                "job_context": self.job_context,
+                "scheduler_state": self.scheduler_state,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for scheduler errors."""
+        return 500  # Internal Server Error
+
+
+class SchedulerJobError(SchedulerError):
+    """
+    Exception raised when job scheduling or execution fails.
+
+    This exception is raised when scheduled jobs fail to start, execute,
+    or complete successfully, or when job configuration is invalid.
+
+    Attributes:
+        job_name: Name of the job that failed
+        job_type: Type of job (e.g., 'real_time_collection', 'gap_analysis')
+        execution_context: Context during job execution
+        retry_count: Number of retries attempted
+        next_run_time: Scheduled time for next execution
+    """
+
+    def __init__(
+        self,
+        message: str,
+        job_name: str | None = None,
+        job_type: str | None = None,
+        execution_context: dict[str, Any] | None = None,
+        retry_count: int | None = None,
+        next_run_time: datetime | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize scheduler job error.
+
+        Args:
+            message: Human-readable error description
+            job_name: Name of the job that failed
+            job_type: Type of job that failed
+            execution_context: Context during job execution
+            retry_count: Number of retries attempted
+            next_run_time: Scheduled time for next execution
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, scheduler_operation="job_execution", **kwargs)
+        self.job_name = job_name or "unknown_job"
+        self.job_type = job_type or "unknown_type"
+        self.execution_context = execution_context or {}
+        self.retry_count = retry_count or 0
+        self.next_run_time = next_run_time
+
+        # Add to context
+        self.context.update(
+            {
+                "job_name": self.job_name,
+                "job_type": self.job_type,
+                "execution_context": self.execution_context,
+                "retry_count": self.retry_count,
+                "next_run_time": next_run_time.isoformat() if next_run_time else None,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for job errors."""
+        return 500  # Internal Server Error
+
+
+class SchedulerStateError(SchedulerError):
+    """
+    Exception raised when scheduler state management fails.
+
+    This exception is raised when the scheduler cannot start, stop,
+    or manage its internal state properly, or when scheduler persistence
+    operations fail.
+
+    Attributes:
+        expected_state: Expected scheduler state
+        actual_state: Actual scheduler state when error occurred
+        state_operation: State operation that failed
+        persistence_error: Original persistence error if applicable
+    """
+
+    def __init__(
+        self,
+        message: str,
+        expected_state: str | None = None,
+        actual_state: str | None = None,
+        state_operation: str | None = None,
+        persistence_error: Exception | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize scheduler state error.
+
+        Args:
+            message: Human-readable error description
+            expected_state: Expected scheduler state
+            actual_state: Actual scheduler state when error occurred
+            state_operation: State operation that failed
+            persistence_error: Original persistence error if applicable
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, scheduler_operation="state_management", **kwargs)
+        self.expected_state = expected_state
+        self.actual_state = actual_state
+        self.state_operation = state_operation or "unknown_state_operation"
+        self.persistence_error = persistence_error
+
+        # Add to context
+        self.context.update(
+            {
+                "expected_state": expected_state,
+                "actual_state": actual_state,
+                "state_operation": self.state_operation,
+                "persistence_error": str(persistence_error)
+                if persistence_error
+                else None,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for state errors."""
+        return 500  # Internal Server Error
+
+
+class SchedulerConfigurationError(SchedulerError):
+    """
+    Exception raised when scheduler configuration is invalid.
+
+    This exception is raised when scheduler configuration parameters
+    are invalid, job configuration is malformed, or when configuration
+    validation fails.
+
+    Attributes:
+        configuration_field: Configuration field that failed validation
+        configuration_value: Value that caused the error
+        validation_context: Additional validation context
+        suggested_fix: Suggested fix for the configuration error
+    """
+
+    def __init__(
+        self,
+        message: str,
+        configuration_field: str | None = None,
+        configuration_value: Any = None,
+        validation_context: dict[str, Any] | None = None,
+        suggested_fix: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize scheduler configuration error.
+
+        Args:
+            message: Human-readable error description
+            configuration_field: Configuration field that failed
+            configuration_value: Value that caused the error
+            validation_context: Additional validation context
+            suggested_fix: Suggested fix for the configuration error
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, scheduler_operation="configuration", **kwargs)
+        self.configuration_field = configuration_field
+        self.configuration_value = configuration_value
+        self.validation_context = validation_context or {}
+        self.suggested_fix = suggested_fix
+
+        # Add to context
+        self.context.update(
+            {
+                "configuration_field": configuration_field,
+                "configuration_value": str(configuration_value)
+                if configuration_value
+                else None,
+                "validation_context": self.validation_context,
+                "suggested_fix": suggested_fix,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for configuration errors."""
+        return 400  # Bad Request
+
+
 def create_backfill_error_from_service_error(
     service_error: ServiceError,
     backfill_id: int | str | None = None,
@@ -614,6 +846,33 @@ def create_backfill_error_from_service_error(
         backfill_id=backfill_id,
         area_code=area_code,
         endpoint_name=endpoint_name,
+        context={
+            "original_error_type": service_error.__class__.__name__,
+            "service_context": service_error.to_dict(),
+        },
+    )
+
+
+def create_scheduler_error_from_service_error(
+    service_error: ServiceError,
+    scheduler_operation: str | None = None,
+    job_id: str | None = None,
+) -> SchedulerError:
+    """
+    Convert a service error to a scheduler error with scheduler context.
+
+    Args:
+        service_error: The original service error
+        scheduler_operation: Scheduler operation that was being performed
+        job_id: ID of the job that caused the error
+
+    Returns:
+        SchedulerError with service context preserved
+    """
+    return SchedulerError(
+        message=f"Scheduler operation failed: {service_error}",
+        scheduler_operation=scheduler_operation,
+        job_id=job_id,
         context={
             "original_error_type": service_error.__class__.__name__,
             "service_context": service_error.to_dict(),

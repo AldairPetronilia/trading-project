@@ -7,6 +7,7 @@ from pydantic import (
     Field,
     HttpUrl,
     SecretStr,
+    ValidationInfo,
     computed_field,
     field_validator,
 )
@@ -19,6 +20,12 @@ MIN_PORT = 1
 MAX_PORT = 65535
 MIN_API_TOKEN_LENGTH = 10
 REDACTED_VALUE = "***REDACTED***"
+
+# Time validation constants
+MIN_HOUR = 0
+MAX_HOUR = 23
+MIN_MINUTE = 0
+MAX_MINUTE = 59
 
 
 class DatabaseConfig(BaseModel):
@@ -142,6 +149,152 @@ class BackfillConfig(BaseModel):
     )
 
 
+class SchedulerConfig(BaseModel):
+    """Scheduler configuration for automated data collection and analysis."""
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable the scheduler service",
+    )
+
+    # Real-time data collection
+    real_time_collection_enabled: bool = Field(
+        default=True,
+        description="Enable real-time data collection jobs",
+    )
+    real_time_collection_interval_minutes: int = Field(
+        default=30,
+        description="Interval for real-time data collection in minutes",
+        ge=5,
+        le=120,
+    )
+
+    # Gap analysis
+    gap_analysis_enabled: bool = Field(
+        default=True,
+        description="Enable gap analysis jobs",
+    )
+    gap_analysis_interval_hours: int = Field(
+        default=4,
+        description="Interval for gap analysis in hours",
+        ge=1,
+        le=24,
+    )
+
+    # Daily backfill analysis
+    daily_backfill_analysis_enabled: bool = Field(
+        default=True,
+        description="Enable daily backfill analysis jobs",
+    )
+    daily_backfill_analysis_hour: int = Field(
+        default=2,
+        description="Hour of day to run daily backfill analysis (0-23)",
+        ge=0,
+        le=23,
+    )
+    daily_backfill_analysis_minute: int = Field(
+        default=0,
+        description="Minute of hour to run daily backfill analysis (0-59)",
+        ge=0,
+        le=59,
+    )
+
+    # Job persistence and recovery
+    use_persistent_job_store: bool = Field(
+        default=True,
+        description="Use database for job persistence",
+    )
+    job_defaults_max_instances: int = Field(
+        default=3,
+        description="Maximum instances of any job that can run simultaneously",
+        ge=1,
+        le=10,
+    )
+    job_defaults_coalesce: bool = Field(
+        default=True,
+        description="Coalesce missed job executions",
+    )
+    job_defaults_misfire_grace_time_seconds: int = Field(
+        default=300,
+        description="Grace time for missed job executions in seconds",
+        ge=60,
+        le=3600,
+    )
+
+    # Retry and failure handling
+    max_retry_attempts: int = Field(
+        default=3,
+        description="Maximum retry attempts for failed jobs",
+        ge=1,
+        le=10,
+    )
+    retry_backoff_base_seconds: float = Field(
+        default=2.0,
+        description="Base seconds for exponential backoff retry",
+        ge=1.0,
+        le=60.0,
+    )
+    retry_backoff_max_seconds: float = Field(
+        default=300.0,
+        description="Maximum seconds for exponential backoff retry",
+        ge=60.0,
+        le=3600.0,
+    )
+
+    # Health monitoring
+    job_health_check_interval_minutes: int = Field(
+        default=15,
+        description="Interval for job health checks in minutes",
+        ge=5,
+        le=60,
+    )
+    failed_job_notification_threshold: int = Field(
+        default=3,
+        description="Number of consecutive failures before notification",
+        ge=1,
+        le=10,
+    )
+
+    # Performance settings
+    thread_pool_max_workers: int = Field(
+        default=5,
+        description="Maximum number of threads for job execution",
+        ge=1,
+        le=20,
+    )
+
+    @field_validator("daily_backfill_analysis_hour")  # type: ignore[misc]
+    @classmethod
+    def validate_hour_range(cls, v: int) -> int:
+        if not MIN_HOUR <= v <= MAX_HOUR:
+            msg = f"Hour must be between {MIN_HOUR} and {MAX_HOUR}, got {v}"
+            raise ConfigValidationError(msg)
+        return v
+
+    @field_validator("daily_backfill_analysis_minute")  # type: ignore[misc]
+    @classmethod
+    def validate_minute_range(cls, v: int) -> int:
+        if not MIN_MINUTE <= v <= MAX_MINUTE:
+            msg = f"Minute must be between {MIN_MINUTE} and {MAX_MINUTE}, got {v}"
+            raise ConfigValidationError(msg)
+        return v
+
+    @field_validator("retry_backoff_max_seconds")  # type: ignore[misc]
+    @classmethod
+    def validate_backoff_max_greater_than_base(
+        cls, v: float, info: ValidationInfo
+    ) -> float:
+        if info.data and "retry_backoff_base_seconds" in info.data:
+            base = info.data["retry_backoff_base_seconds"]
+            if v <= base:
+                msg = (
+                    f"retry_backoff_max_seconds ({v}) must be greater than "
+                    f"retry_backoff_base_seconds ({base})"
+                )
+                raise ConfigValidationError(msg)
+        return v
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).parent.parent.parent
@@ -179,6 +332,10 @@ class Settings(BaseSettings):
     backfill: BackfillConfig = Field(
         default_factory=BackfillConfig,
         description="Backfill configuration",
+    )
+    scheduler: SchedulerConfig = Field(
+        default_factory=SchedulerConfig,
+        description="Scheduler configuration",
     )
 
     @field_validator("environment")  # type: ignore[misc]

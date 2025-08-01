@@ -8,6 +8,7 @@ from app.repositories.backfill_progress_repository import BackfillProgressReposi
 from app.repositories.energy_data_repository import EnergyDataRepository
 from app.services.backfill_service import BackfillService
 from app.services.entsoe_data_service import EntsoEDataService
+from app.services.scheduler_service import SchedulerService
 from entsoe_client.client.entsoe_client import EntsoEClient
 from entsoe_client.client.entsoe_client_factory import EntsoEClientFactory
 
@@ -61,4 +62,12 @@ class Container(containers.DeclarativeContainer):
         database=database,
         config=providers.Callable(lambda c: c.backfill, config),
         progress_repository=backfill_progress_repository,
+    )
+
+    scheduler_service = providers.Factory(
+        SchedulerService,
+        entsoe_data_service=entsoe_data_service,
+        backfill_service=backfill_service,
+        database=database,
+        config=providers.Callable(lambda c: c.scheduler, config),
     )
