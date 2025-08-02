@@ -1,7 +1,5 @@
 """Unit tests for DefaultEntsoEClient."""
 
-# ruff: noqa: PLR0913
-
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 

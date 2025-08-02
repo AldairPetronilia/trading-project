@@ -823,6 +823,230 @@ class SchedulerConfigurationError(SchedulerError):
         return 400  # Bad Request
 
 
+class MonitoringError(ServiceError):
+    """
+    Base exception for monitoring-related operations.
+
+    This exception serves as the base for all monitoring-related errors,
+    providing common functionality for monitoring operations, metric collection,
+    and monitoring system state management error handling.
+
+    Attributes:
+        monitoring_operation: The monitoring operation that failed
+        metric_type: Type of metric being monitored
+        time_range: Time range for monitoring data collection
+    """
+
+    def __init__(
+        self,
+        message: str,
+        monitoring_operation: str | None = None,
+        metric_type: str | None = None,
+        time_range: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize monitoring error.
+
+        Args:
+            message: Human-readable error description
+            monitoring_operation: Operation that failed (e.g., 'collect', 'analyze', 'alert')
+            metric_type: Type of metric being monitored
+            time_range: Time range for monitoring data collection
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, service_name="monitoring", **kwargs)
+        self.monitoring_operation = monitoring_operation or "unknown_operation"
+        self.metric_type = metric_type
+        self.time_range = time_range or {}
+
+        # Add to context
+        self.context.update(
+            {
+                "monitoring_operation": self.monitoring_operation,
+                "metric_type": metric_type,
+                "time_range": self.time_range,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for monitoring errors."""
+        return 500  # Internal Server Error
+
+
+class MonitoringConfigurationError(MonitoringError):
+    """
+    Exception raised when monitoring configuration is invalid.
+
+    This exception is raised when monitoring configuration parameters
+    are invalid, metric configuration is malformed, or when configuration
+    validation fails.
+
+    Attributes:
+        config_field: Configuration field that failed validation
+        config_value: Value that caused the error
+        validation_context: Additional validation context
+        suggested_fix: Suggested fix for the configuration error
+    """
+
+    def __init__(
+        self,
+        message: str,
+        config_field: str | None = None,
+        config_value: Any = None,
+        validation_context: dict[str, Any] | None = None,
+        suggested_fix: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize monitoring configuration error.
+
+        Args:
+            message: Human-readable error description
+            config_field: Configuration field that failed
+            config_value: Value that caused the error
+            validation_context: Additional validation context
+            suggested_fix: Suggested fix for the configuration error
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, monitoring_operation="configuration", **kwargs)
+        self.config_field = config_field
+        self.config_value = config_value
+        self.validation_context = validation_context or {}
+        self.suggested_fix = suggested_fix
+
+        # Add to context
+        self.context.update(
+            {
+                "config_field": config_field,
+                "config_value": str(config_value) if config_value else None,
+                "validation_context": self.validation_context,
+                "suggested_fix": suggested_fix,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for configuration errors."""
+        return 400  # Bad Request
+
+
+class MonitoringDataError(MonitoringError):
+    """
+    Exception raised when monitoring data collection or processing fails.
+
+    This exception is raised when metric data collection fails, data processing
+    encounters errors, or when monitoring data validation fails.
+
+    Attributes:
+        data_source: Source of the monitoring data
+        operation_type: Type of operation that failed
+        data_context: Context about the data being processed
+        processing_stage: Stage of processing where failure occurred
+    """
+
+    def __init__(
+        self,
+        message: str,
+        data_source: str | None = None,
+        operation_type: str | None = None,
+        data_context: dict[str, Any] | None = None,
+        processing_stage: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize monitoring data error.
+
+        Args:
+            message: Human-readable error description
+            data_source: Source of the monitoring data
+            operation_type: Type of operation that failed
+            data_context: Context about the data being processed
+            processing_stage: Stage of processing where failure occurred
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, monitoring_operation="data_processing", **kwargs)
+        self.data_source = data_source or "unknown_source"
+        self.operation_type = operation_type or "unknown_operation"
+        self.data_context = data_context or {}
+        self.processing_stage = processing_stage
+
+        # Add to context
+        self.context.update(
+            {
+                "data_source": self.data_source,
+                "operation_type": self.operation_type,
+                "data_context": self.data_context,
+                "processing_stage": processing_stage,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for data errors."""
+        return 422  # Unprocessable Entity
+
+
+class MonitoringThresholdError(MonitoringError):
+    """
+    Exception raised when monitoring threshold violations occur.
+
+    This exception is raised when metric values exceed configured thresholds,
+    alerting fails, or when threshold validation encounters errors.
+
+    Attributes:
+        threshold_type: Type of threshold that was violated
+        current_value: Current value that violated the threshold
+        threshold_value: The threshold value that was exceeded
+        violation_context: Additional context about the violation
+    """
+
+    def __init__(
+        self,
+        message: str,
+        threshold_type: str | None = None,
+        current_value: float | None = None,
+        threshold_value: float | None = None,
+        violation_context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize monitoring threshold error.
+
+        Args:
+            message: Human-readable error description
+            threshold_type: Type of threshold that was violated
+            current_value: Current value that violated the threshold
+            threshold_value: The threshold value that was exceeded
+            violation_context: Additional context about the violation
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, monitoring_operation="threshold_validation", **kwargs)
+        self.threshold_type = threshold_type or "unknown_threshold"
+        self.current_value = current_value
+        self.threshold_value = threshold_value
+        self.violation_context = violation_context or {}
+
+        # Add to context
+        self.context.update(
+            {
+                "threshold_type": self.threshold_type,
+                "current_value": current_value,
+                "threshold_value": threshold_value,
+                "violation_severity": (
+                    abs(current_value - threshold_value) / threshold_value
+                    if current_value is not None
+                    and threshold_value is not None
+                    and threshold_value != 0
+                    else None
+                ),
+                "violation_context": self.violation_context,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for threshold errors."""
+        return 409  # Conflict
+
+
 def create_backfill_error_from_service_error(
     service_error: ServiceError,
     backfill_id: int | str | None = None,
@@ -873,6 +1097,33 @@ def create_scheduler_error_from_service_error(
         message=f"Scheduler operation failed: {service_error}",
         scheduler_operation=scheduler_operation,
         job_id=job_id,
+        context={
+            "original_error_type": service_error.__class__.__name__,
+            "service_context": service_error.to_dict(),
+        },
+    )
+
+
+def create_monitoring_error_from_service_error(
+    service_error: ServiceError,
+    monitoring_operation: str | None = None,
+    metric_type: str | None = None,
+) -> MonitoringError:
+    """
+    Convert a service error to a monitoring error with monitoring context.
+
+    Args:
+        service_error: The original service error
+        monitoring_operation: Monitoring operation that was being performed
+        metric_type: Type of metric that caused the error
+
+    Returns:
+        MonitoringError with service context preserved
+    """
+    return MonitoringError(
+        message=f"Monitoring operation failed: {service_error}",
+        monitoring_operation=monitoring_operation,
+        metric_type=metric_type,
         context={
             "original_error_type": service_error.__class__.__name__,
             "service_context": service_error.to_dict(),

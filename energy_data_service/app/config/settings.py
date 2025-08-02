@@ -295,6 +295,39 @@ class SchedulerConfig(BaseModel):
         return v
 
 
+class MonitoringConfig(BaseModel):
+    """Monitoring and performance tracking configuration."""
+
+    metrics_retention_days: int = Field(
+        default=90,
+        description="Days to retain monitoring metrics",
+        ge=7,
+        le=365,
+    )
+    performance_threshold_ms: float = Field(
+        default=5000.0,
+        description="Performance threshold in milliseconds for alerts",
+        ge=1000.0,
+        le=30000.0,
+    )
+    success_rate_threshold: float = Field(
+        default=0.95,
+        description="Success rate threshold for service health alerts",
+        ge=0.8,
+        le=1.0,
+    )
+    anomaly_detection_enabled: bool = Field(
+        default=True,
+        description="Enable anomaly detection for monitoring metrics",
+    )
+    dashboard_update_interval_minutes: int = Field(
+        default=5,
+        description="Dashboard update interval in minutes",
+        ge=1,
+        le=60,
+    )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).parent.parent.parent
@@ -336,6 +369,10 @@ class Settings(BaseSettings):
     scheduler: SchedulerConfig = Field(
         default_factory=SchedulerConfig,
         description="Scheduler configuration",
+    )
+    monitoring: MonitoringConfig = Field(
+        default_factory=MonitoringConfig,
+        description="Monitoring configuration",
     )
 
     @field_validator("environment")  # type: ignore[misc]
