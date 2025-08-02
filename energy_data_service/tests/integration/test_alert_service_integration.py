@@ -45,7 +45,7 @@ from app.models.load_data import EnergyDataType
 from app.repositories.alert_repository import AlertRepository
 from app.repositories.alert_rule_repository import AlertRuleRepository
 from app.repositories.collection_metrics_repository import CollectionMetricsRepository
-from app.services.alert_service import AlertService, AlertServiceError
+from app.services.alert_service import AlertService
 from app.services.monitoring_service import MonitoringService
 from pydantic import SecretStr
 from sqlalchemy import text
@@ -90,16 +90,13 @@ def database_config(postgres_container: PostgresContainer) -> DatabaseConfig:
 def alert_config() -> AlertConfig:
     """Create AlertConfig with test-appropriate settings."""
     return AlertConfig(
-        max_retry_attempts=2,  # Fewer retries for testing
-        retry_delay_minutes=1,  # Short delay for testing
-        delivery_timeout_seconds=10,  # Short timeout for testing
-        rate_limit_window_minutes=5,  # Short window for testing
-        max_alerts_per_window=3,  # Low limit for testing
-        correlation_window_minutes=15,  # Short window for testing
-        collection_success_threshold=0.8,  # Lower threshold for testing
-        performance_threshold_ms=2000.0,  # Lower threshold for testing
-        failure_rate_threshold=0.2,  # Higher threshold for testing
-        resolved_alerts_retention_days=7,  # Short retention for testing
+        evaluation_interval_minutes=1,
+        max_delivery_attempts=2,
+        delivery_retry_delay_seconds=30,
+        delivery_timeout_seconds=10,
+        cooldown_override_minutes=5,
+        alert_retention_days=7,
+        resolved_alert_retention_days=7,
     )
 
 
@@ -144,17 +141,6 @@ async def database(test_settings: Settings) -> AsyncGenerator[Database]:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"))
 
         # Create hypertables for time-series data
-        try:  # noqa: SIM105
-            await conn.execute(
-                text(
-                    "SELECT create_hypertable('energy_data_points', 'timestamp', "
-                    "if_not_exists => TRUE);"
-                )
-            )
-        except Exception:  # noqa: BLE001, S110
-            # Hypertable might already exist, which is fine for tests
-            pass
-
         try:  # noqa: SIM105
             await conn.execute(
                 text(
@@ -218,7 +204,6 @@ async def monitoring_service(
 async def alert_service(
     alert_repository: AlertRepository,
     alert_rule_repository: AlertRuleRepository,
-    database: Database,
     alert_config: AlertConfig,
     monitoring_service: MonitoringService,
 ) -> AsyncGenerator[AlertService]:
@@ -226,7 +211,6 @@ async def alert_service(
     service = AlertService(
         alert_repository=alert_repository,
         alert_rule_repository=alert_rule_repository,
-        database=database,
         config=alert_config,
         monitoring_service=monitoring_service,
     )
@@ -387,16 +371,9 @@ class TestAlertServiceIntegration:
             correlation_key="test_correlation_key",
         )
 
-        # Second alert should be None (deduplicated) or same as first
-        if alert2 is not None:
-            assert alert2.id == alert1.id
-        else:
-            # Verify similar alerts exist
-            similar_alerts = await alert_service.find_similar_alerts(
-                "test_correlation_key"
-            )
-            assert len(similar_alerts) == 1
-            assert similar_alerts[0].id == alert1.id
+        # Second alert should be the same as the first due to deduplication
+        assert alert2 is not None
+        assert alert2.id == alert1.id
 
     @pytest.mark.asyncio
     async def test_correlation_key_generation(
@@ -689,21 +666,12 @@ class TestAlertServiceIntegration:
             correlation_key=correlation_key,
         )
 
-        alert2 = await alert_service.create_alert(
-            rule=sample_alert_rule,
-            title="Similar Alert 2",
-            message="Second similar alert",
-            trigger_context={"test": "similarity"},
-            correlation_key=correlation_key,
-        )
-
         # Find similar alerts
-        similar_alerts = await alert_service.find_similar_alerts(correlation_key)
+        similar_alert = await alert_service.find_similar_alerts(correlation_key)
 
-        # Should find both alerts (or just one if deduplication worked)
-        assert len(similar_alerts) >= 1
-        correlation_keys = [alert.correlation_key for alert in similar_alerts]
-        assert correlation_key in correlation_keys
+        # Should find the alert
+        assert similar_alert is not None
+        assert similar_alert.id == alert1.id
 
     @pytest.mark.asyncio
     async def test_alert_lifecycle_complete(
@@ -786,15 +754,14 @@ class TestAlertServiceErrorHandling:
             # If it succeeds, the alert should be created
             assert alert is not None
         except Exception as e:
-            # If it fails, it should be a proper AlertServiceError
-            assert isinstance(e, (AlertServiceError, Exception))
+            # If it fails, it should be a proper AlertError
+            assert isinstance(e, AlertError)
 
     @pytest.mark.asyncio
     async def test_monitoring_service_unavailable(
         self,
         alert_repository: AlertRepository,
         alert_rule_repository: AlertRuleRepository,
-        database: Database,
         alert_config: AlertConfig,
     ) -> None:
         """Test alert service behavior when monitoring service is unavailable."""
@@ -802,7 +769,6 @@ class TestAlertServiceErrorHandling:
         alert_service = AlertService(
             alert_repository=alert_repository,
             alert_rule_repository=alert_rule_repository,
-            database=database,
             config=alert_config,
             monitoring_service=None,  # No monitoring service
         )

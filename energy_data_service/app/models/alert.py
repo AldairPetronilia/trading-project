@@ -119,7 +119,6 @@ class Alert(TimestampedModel):
     triggered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        index=True,
         comment="Timestamp when the alert condition was detected",
     )
 

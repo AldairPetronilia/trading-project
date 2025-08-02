@@ -34,7 +34,6 @@ from app.models.alert_rule import AlertRule
 from app.models.load_data import EnergyDataType
 
 if TYPE_CHECKING:
-    from app.config.database import Database
     from app.config.settings import AlertConfig
     from app.repositories.alert_repository import AlertRepository
     from app.repositories.alert_rule_repository import AlertRuleRepository
@@ -44,8 +43,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 # Constants
-DEFAULT_RATE_LIMIT_WINDOW_MINUTES = 15
-DEFAULT_MAX_ALERTS_PER_WINDOW = 10
 DEFAULT_CORRELATION_WINDOW_MINUTES = 60
 DEFAULT_DELIVERY_TIMEOUT_SECONDS = 30
 DEFAULT_MAX_RETRY_ATTEMPTS = 3
@@ -133,11 +130,16 @@ class AlertService:
                         continue
 
                     # Evaluate rule conditions
-                    should_trigger = await self._evaluate_rule_conditions(rule)
+                    (
+                        should_trigger,
+                        trigger_context,
+                    ) = await self._evaluate_rule_conditions(rule)
 
                     if should_trigger:
                         # Create and deliver alert
-                        alert = await self._trigger_alert_from_rule(rule)
+                        alert = await self._trigger_alert_from_rule(
+                            rule, trigger_context
+                        )
                         evaluation_results["alerts_triggered"] += 1
                         evaluation_results["triggered_rule_details"].append(
                             {
@@ -233,8 +235,9 @@ class AlertService:
                     correlation_key,
                 )
                 # Return the most recent similar alert instead of creating new one
-                similar_alerts = await self.find_similar_alerts(correlation_key)
-                return similar_alerts[0] if similar_alerts else None
+                existing_alert = await self.find_similar_alerts(correlation_key)
+                if existing_alert:
+                    return existing_alert
 
             # Create new alert
             alert = Alert(
@@ -353,20 +356,12 @@ class AlertService:
             AlertError: If retrieval fails
         """
         try:
-            alerts = await self._alert_repository.get_unresolved_alerts()
-
-            # Apply filters
-            if severity:
-                alerts = [a for a in alerts if a.severity == severity]
-            if alert_type:
-                alerts = [a for a in alerts if a.alert_type == alert_type]
-            if area_code:
-                alerts = [a for a in alerts if a.area_code == area_code]
-
-            # Apply limit
-            if limit:
-                alerts = alerts[:limit]
-
+            alerts = await self._alert_repository.get_unresolved_alerts(
+                severity=severity,
+                alert_type=alert_type,
+                area_code=area_code,
+                limit=limit,
+            )
             log.debug(
                 "Retrieved %d active alerts (severity: %s, type: %s, area: %s)",
                 len(alerts),
@@ -374,7 +369,6 @@ class AlertService:
                 alert_type.value if alert_type else "any",
                 area_code or "any",
             )
-
         except Exception as e:
             error_msg = f"Failed to get active alerts: {e}"
             raise AlertError(
@@ -392,45 +386,35 @@ class AlertService:
 
     async def find_similar_alerts(
         self, correlation_key: str, window_minutes: int | None = None
-    ) -> list[Alert]:
+    ) -> Alert | None:
         """
-        Find alerts with the same correlation key within a time window.
+        Find the most recent, unresolved alert with the same correlation key within a time window.
 
         Args:
             correlation_key: Correlation key to search for
             window_minutes: Time window in minutes (uses config default if not provided)
 
         Returns:
-            List of alerts with matching correlation key
+            The most recent unresolved alert if found, None otherwise
 
         Raises:
             AlertError: If search fails
         """
         try:
             if window_minutes is None:
-                window_minutes = getattr(
-                    self._config,
-                    "correlation_window_minutes",
-                    DEFAULT_CORRELATION_WINDOW_MINUTES,
-                )
+                window_minutes = self._config.cooldown_override_minutes
 
-            similar_alerts = await self._alert_repository.get_alerts_by_correlation_key(
-                correlation_key
+            window = timedelta(minutes=window_minutes)
+            alert = await self._alert_repository.find_unresolved_similar_alert(
+                correlation_key, window
             )
 
-            # Filter by time window
-            cutoff_time = datetime.now(UTC) - timedelta(minutes=window_minutes)
-            recent_similar = [
-                alert for alert in similar_alerts if alert.triggered_at >= cutoff_time
-            ]
-
             log.debug(
-                "Found %d similar alerts for correlation key %s within %d minutes",
-                len(recent_similar),
+                "Found %s similar alert for correlation key %s within %d minutes",
+                "a" if alert else "no",
                 correlation_key,
                 window_minutes,
             )
-
         except Exception as e:
             error_msg = f"Failed to find similar alerts: {e}"
             raise AlertError(
@@ -442,7 +426,7 @@ class AlertService:
                 },
             ) from e
         else:
-            return recent_similar
+            return alert
 
     async def should_deduplicate_alert(
         self, correlation_key: str, window_minutes: int | None = None
@@ -461,20 +445,16 @@ class AlertService:
             AlertError: If deduplication check fails
         """
         try:
-            similar_alerts = await self.find_similar_alerts(
+            similar_alert = await self.find_similar_alerts(
                 correlation_key, window_minutes
             )
-
-            # Deduplicate if there are recent unresolved alerts with same correlation
-            should_dedupe = any(not alert.is_resolved for alert in similar_alerts)
+            should_dedupe = similar_alert is not None
 
             log.debug(
-                "Deduplication check for %s: %s (%d similar alerts found)",
+                "Deduplication check for %s: %s",
                 correlation_key,
                 "DEDUPLICATE" if should_dedupe else "CREATE_NEW",
-                len(similar_alerts),
             )
-
         except Exception as e:
             error_msg = f"Failed to check alert deduplication: {e}"
             raise AlertError(
@@ -641,7 +621,7 @@ class AlertService:
             AlertDeliveryError: If email delivery fails
         """
         try:
-            email_config = rule.get_delivery_config("email")
+            email_config = rule.get_delivery_config(AlertDeliveryChannel.EMAIL)
 
             # For now, return a mock successful delivery
             # In production, this would integrate with an email service
@@ -683,7 +663,7 @@ class AlertService:
             AlertDeliveryError: If webhook delivery fails
         """
         try:
-            webhook_config = rule.get_delivery_config("webhook")
+            webhook_config = rule.get_delivery_config(AlertDeliveryChannel.WEBHOOK)
 
             # For now, return a mock successful delivery
             # In production, this would make HTTP requests to configured webhooks
@@ -721,17 +701,13 @@ class AlertService:
             AlertError: If retry operation fails
         """
         try:
-            max_attempts = getattr(
-                self._config, "max_retry_attempts", DEFAULT_MAX_RETRY_ATTEMPTS
-            )
-            retry_delay = getattr(
-                self._config, "retry_delay_minutes", DEFAULT_RETRY_DELAY_MINUTES
-            )
+            max_attempts = self._config.max_delivery_attempts
+            retry_delay = self._config.delivery_retry_delay_seconds
 
             retry_candidates = (
                 await self._alert_repository.get_delivery_retry_candidates(
                     max_attempts=max_attempts,
-                    retry_delay_minutes=retry_delay,
+                    retry_delay_minutes=int(retry_delay / 60),
                 )
             )
 
@@ -912,7 +888,7 @@ class AlertService:
             )
 
             for combination, success_rate in success_rates.items():
-                threshold = getattr(self._config, "collection_success_threshold", 0.9)
+                threshold = self._config.success_rate_threshold
                 if success_rate < threshold:
                     health_results["collection_health_status"] = "degraded"
                     health_results["issues_detected"].append(
@@ -1001,24 +977,41 @@ class AlertService:
 
     # Private helper methods
 
-    async def _evaluate_rule_conditions(self, rule: AlertRule) -> bool:
+    async def _evaluate_rule_conditions(
+        self, rule: AlertRule
+    ) -> tuple[bool, dict[str, Any]]:
         """Evaluate if rule conditions are met based on monitoring data."""
-        # This is a placeholder for rule condition evaluation logic
-        # In a full implementation, this would evaluate the rule's conditions
-        # against current monitoring metrics, thresholds, etc.
+        if not self._monitoring_service:
+            return False, {}
 
-        # For now, return False to prevent automatic triggering during testing
-        return False
+        if rule.alert_type == AlertType.SYSTEM_HEALTH:
+            health_summary = await self._monitoring_service.get_system_health_summary()
+            status = health_summary.get("health_assessment", {}).get("overall_status")
+            if status == "degraded":
+                return True, {"health_summary": health_summary}
 
-    async def _trigger_alert_from_rule(self, rule: AlertRule) -> Alert:
+        elif rule.alert_type == AlertType.PERFORMANCE:
+            threshold = rule.get_condition_value("threshold_ms", 5000.0)
+            period = timedelta(minutes=rule.get_condition_value("period_minutes", 60))
+            metrics = await self._monitoring_service.get_performance_metrics(period)
+            avg_response_time = metrics.get("avg_api_response_time")
+            if avg_response_time and avg_response_time > threshold:
+                return True, {"performance_metrics": metrics, "threshold_ms": threshold}
+
+        return False, {}
+
+    async def _trigger_alert_from_rule(
+        self, rule: AlertRule, trigger_context: dict[str, Any]
+    ) -> Alert:
         """Trigger an alert from a rule evaluation."""
         return await self.create_alert(
             rule=rule,
-            title=f"Alert: {rule.name}",
-            message=f"Alert rule '{rule.name}' conditions have been met",
+            title=f"Alert Triggered: {rule.name}",
+            message=f"Alert rule '{rule.name}' conditions have been met. Context: {trigger_context}",
             trigger_context={
                 "rule_evaluation": True,
                 "evaluation_time": datetime.now(UTC).isoformat(),
+                **trigger_context,
             },
         )
 
@@ -1057,7 +1050,7 @@ class AlertService:
         """Check performance metrics against thresholds."""
         # Placeholder for performance threshold checking
         avg_response_time = performance_metrics.get("avg_api_response_time")
-        threshold = getattr(self._config, "performance_threshold_ms", 5000)
+        threshold = self._config.performance_threshold_ms
 
         if avg_response_time and avg_response_time > threshold:
             results["threshold_violations"].append(
@@ -1075,15 +1068,15 @@ class AlertService:
         """Check failure patterns against thresholds."""
         # Placeholder for failure threshold checking
         failure_rate = failure_analysis.get("failure_rate", 0)
-        threshold = getattr(self._config, "failure_rate_threshold", 0.1)
+        threshold = self._config.success_rate_threshold
 
-        if failure_rate > threshold:
+        if failure_rate > (1 - threshold):
             results["threshold_violations"].append(
                 {
                     "type": "failure_rate_threshold",
                     "metric": "failure_rate",
                     "value": failure_rate,
-                    "threshold": threshold,
+                    "threshold": 1 - threshold,
                 }
             )
 

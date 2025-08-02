@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.config.database import Database
 from app.exceptions.repository_exceptions import DataAccessError
 from app.models.alert import Alert
-from app.models.alert_enums import AlertDeliveryStatus, AlertSeverity
+from app.models.alert_enums import AlertDeliveryStatus, AlertSeverity, AlertType
 from app.repositories.base_repository import BaseRepository
 
 
@@ -243,8 +243,20 @@ class AlertRepository(BaseRepository[Alert]):
                     context={"correlation_key": correlation_key},
                 ) from e
 
-    async def get_unresolved_alerts(self) -> list[Alert]:
-        """Get alerts where resolved_at is None.
+    async def get_unresolved_alerts(
+        self,
+        severity: AlertSeverity | None = None,
+        alert_type: AlertType | None = None,
+        area_code: str | None = None,
+        limit: int | None = None,
+    ) -> list[Alert]:
+        """Get unresolved alerts with optional filtering.
+
+        Args:
+            severity: Optional severity level to filter by
+            alert_type: Optional alert type to filter by
+            area_code: Optional area code to filter by
+            limit: Optional limit on number of results
 
         Returns:
             List of unresolved alerts ordered by triggered_at desc
@@ -254,11 +266,22 @@ class AlertRepository(BaseRepository[Alert]):
         """
         async with self.database.session_factory() as session:
             try:
+                conditions = [Alert.resolved_at.is_(None)]
+                if severity:
+                    conditions.append(Alert.severity == severity)
+                if alert_type:
+                    conditions.append(Alert.alert_type == alert_type)
+                if area_code:
+                    conditions.append(Alert.area_code == area_code)
+
                 stmt = (
                     select(Alert)
-                    .where(Alert.resolved_at.is_(None))
+                    .where(and_(*conditions))
                     .order_by(desc(Alert.triggered_at))
                 )
+                if limit:
+                    stmt = stmt.limit(limit)
+
                 result = await session.execute(stmt)
                 return list(result.scalars().all())
             except SQLAlchemyError as e:
@@ -267,6 +290,58 @@ class AlertRepository(BaseRepository[Alert]):
                     error_msg,
                     model_type="Alert",
                     operation="get_unresolved_alerts",
+                    context={
+                        "severity": severity.value if severity else None,
+                        "alert_type": alert_type.value if alert_type else None,
+                        "area_code": area_code,
+                        "limit": limit,
+                    },
+                ) from e
+
+    async def find_unresolved_similar_alert(
+        self, correlation_key: str, window: timedelta
+    ) -> Alert | None:
+        """Find the most recent, unresolved alert with the same correlation key within a time window.
+
+        Args:
+            correlation_key: The correlation key to search for
+            window: The time window to check for recent alerts
+
+        Returns:
+            The most recent unresolved alert if found, None otherwise
+
+        Raises:
+            DataAccessError: If database operation fails
+        """
+        async with self.database.session_factory() as session:
+            try:
+                cutoff_time = datetime.now(UTC) - window
+                stmt = (
+                    select(Alert)
+                    .where(
+                        and_(
+                            Alert.correlation_key == correlation_key,
+                            Alert.resolved_at.is_(None),
+                            Alert.triggered_at >= cutoff_time,
+                        )
+                    )
+                    .order_by(desc(Alert.triggered_at))
+                    .limit(1)
+                )
+                result = await session.execute(stmt)
+                return result.scalar_one_or_none()
+            except SQLAlchemyError as e:
+                error_msg = (
+                    f"Failed to find similar unresolved alert for key {correlation_key}"
+                )
+                raise DataAccessError(
+                    error_msg,
+                    model_type="Alert",
+                    operation="find_unresolved_similar_alert",
+                    context={
+                        "correlation_key": correlation_key,
+                        "window_seconds": window.total_seconds(),
+                    },
                 ) from e
 
     async def get_alerts_by_delivery_status(
