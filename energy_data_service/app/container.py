@@ -4,10 +4,15 @@ from app.collectors.entsoe_collector import EntsoeCollector
 from app.config.database import Database
 from app.config.settings import BackfillConfig, Settings
 from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
+from app.repositories.alert_repository import AlertRepository
+from app.repositories.alert_rule_repository import AlertRuleRepository
 from app.repositories.backfill_progress_repository import BackfillProgressRepository
+from app.repositories.collection_metrics_repository import CollectionMetricsRepository
 from app.repositories.energy_data_repository import EnergyDataRepository
+from app.services.alert_service import AlertService
 from app.services.backfill_service import BackfillService
 from app.services.entsoe_data_service import EntsoEDataService
+from app.services.monitoring_service import MonitoringService
 from app.services.scheduler_service import SchedulerService
 from entsoe_client.client.entsoe_client import EntsoEClient
 from entsoe_client.client.entsoe_client_factory import EntsoEClientFactory
@@ -43,6 +48,21 @@ class Container(containers.DeclarativeContainer):
         database=database,
     )
 
+    collection_metrics_repository = providers.Factory(
+        CollectionMetricsRepository,
+        database=database,
+    )
+
+    alert_repository = providers.Factory(
+        AlertRepository,
+        database=database,
+    )
+
+    alert_rule_repository = providers.Factory(
+        AlertRuleRepository,
+        database=database,
+    )
+
     gl_market_document_processor = providers.Factory(
         GlMarketDocumentProcessor,
     )
@@ -62,6 +82,22 @@ class Container(containers.DeclarativeContainer):
         database=database,
         config=providers.Callable(lambda c: c.backfill, config),
         progress_repository=backfill_progress_repository,
+    )
+
+    monitoring_service = providers.Factory(
+        MonitoringService,
+        metrics_repository=collection_metrics_repository,
+        database=database,
+        config=providers.Callable(lambda c: c.monitoring, config),
+    )
+
+    alert_service = providers.Factory(
+        AlertService,
+        alert_repository=alert_repository,
+        alert_rule_repository=alert_rule_repository,
+        database=database,
+        config=providers.Callable(lambda c: c.alert, config),
+        monitoring_service=monitoring_service,
     )
 
     scheduler_service = providers.Factory(

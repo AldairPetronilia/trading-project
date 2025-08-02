@@ -1129,3 +1129,486 @@ def create_monitoring_error_from_service_error(
             "service_context": service_error.to_dict(),
         },
     )
+
+
+class AlertError(ServiceError):
+    """
+    Base exception for alert service operations.
+
+    This exception serves as the base for all alert-related errors,
+    providing common functionality for alert management, rule evaluation,
+    and alert delivery error handling.
+
+    Attributes:
+        alert_operation: The alert operation that failed
+        alert_id: Unique identifier for the alert instance
+        alert_rule_id: Unique identifier for the alert rule
+        correlation_key: Alert correlation key for deduplication
+    """
+
+    def __init__(
+        self,
+        message: str,
+        alert_operation: str | None = None,
+        alert_id: str | None = None,
+        alert_rule_id: str | None = None,
+        correlation_key: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize alert error.
+
+        Args:
+            message: Human-readable error description
+            alert_operation: Operation that failed (e.g., 'create', 'evaluate', 'deliver')
+            alert_id: Unique identifier for the alert instance
+            alert_rule_id: Unique identifier for the alert rule
+            correlation_key: Alert correlation key for deduplication
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, service_name="alert", **kwargs)
+        self.alert_operation = alert_operation or "unknown_operation"
+        self.alert_id = alert_id
+        self.alert_rule_id = alert_rule_id
+        self.correlation_key = correlation_key
+
+        # Add to context
+        self.context.update(
+            {
+                "alert_operation": self.alert_operation,
+                "alert_id": alert_id,
+                "alert_rule_id": alert_rule_id,
+                "correlation_key": correlation_key,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for alert errors."""
+        return 500  # Internal Server Error
+
+
+class AlertRuleError(AlertError):
+    """
+    Exception raised when alert rule validation and management fails.
+
+    This exception is raised when alert rule creation fails, rule validation
+    encounters errors, or when rule configuration is invalid.
+
+    Attributes:
+        rule_name: Name of the alert rule
+        rule_type: Type of alert rule
+        validation_context: Rule validation context
+        rule_configuration: Rule configuration that caused the error
+    """
+
+    def __init__(
+        self,
+        message: str,
+        rule_name: str | None = None,
+        rule_type: str | None = None,
+        validation_context: dict[str, Any] | None = None,
+        rule_configuration: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize alert rule error.
+
+        Args:
+            message: Human-readable error description
+            rule_name: Name of the alert rule
+            rule_type: Type of alert rule
+            validation_context: Rule validation context
+            rule_configuration: Rule configuration that caused the error
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, alert_operation="rule_management", **kwargs)
+        self.rule_name = rule_name or "unknown_rule"
+        self.rule_type = rule_type or "unknown_type"
+        self.validation_context = validation_context or {}
+        self.rule_configuration = rule_configuration or {}
+
+        # Add to context
+        self.context.update(
+            {
+                "rule_name": self.rule_name,
+                "rule_type": self.rule_type,
+                "validation_context": self.validation_context,
+                "rule_configuration": self.rule_configuration,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for rule errors."""
+        return 400  # Bad Request
+
+
+class AlertDeliveryError(AlertError):
+    """
+    Exception raised when alert delivery fails.
+
+    This exception is raised when alert delivery to configured channels fails,
+    delivery channel connectivity issues occur, or when delivery validation
+    encounters errors.
+
+    Attributes:
+        delivery_channel: Name of the delivery channel
+        channel_type: Type of delivery channel (email, webhook, etc.)
+        delivery_context: Context about the delivery attempt
+        retry_count: Number of delivery retries attempted
+    """
+
+    def __init__(
+        self,
+        message: str,
+        delivery_channel: str | None = None,
+        channel_type: str | None = None,
+        delivery_context: dict[str, Any] | None = None,
+        retry_count: int | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize alert delivery error.
+
+        Args:
+            message: Human-readable error description
+            delivery_channel: Name of the delivery channel
+            channel_type: Type of delivery channel
+            delivery_context: Context about the delivery attempt
+            retry_count: Number of delivery retries attempted
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, alert_operation="delivery", **kwargs)
+        self.delivery_channel = delivery_channel or "unknown_channel"
+        self.channel_type = channel_type or "unknown_type"
+        self.delivery_context = delivery_context or {}
+        self.retry_count = retry_count or 0
+
+        # Add to context
+        self.context.update(
+            {
+                "delivery_channel": self.delivery_channel,
+                "channel_type": self.channel_type,
+                "delivery_context": self.delivery_context,
+                "retry_count": self.retry_count,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for delivery errors."""
+        return 502  # Bad Gateway
+
+
+class AlertEvaluationError(AlertError):
+    """
+    Exception raised when alert rule evaluation and condition checking fails.
+
+    This exception is raised when alert rule evaluation logic fails,
+    condition checking encounters errors, or when evaluation data
+    is invalid or incomplete.
+
+    Attributes:
+        evaluation_context: Context during rule evaluation
+        condition_details: Details about the condition being evaluated
+        evaluation_data: Data used for evaluation
+        evaluation_stage: Stage of evaluation where failure occurred
+    """
+
+    def __init__(
+        self,
+        message: str,
+        evaluation_context: dict[str, Any] | None = None,
+        condition_details: dict[str, Any] | None = None,
+        evaluation_data: dict[str, Any] | None = None,
+        evaluation_stage: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize alert evaluation error.
+
+        Args:
+            message: Human-readable error description
+            evaluation_context: Context during rule evaluation
+            condition_details: Details about the condition being evaluated
+            evaluation_data: Data used for evaluation
+            evaluation_stage: Stage of evaluation where failure occurred
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, alert_operation="evaluation", **kwargs)
+        self.evaluation_context = evaluation_context or {}
+        self.condition_details = condition_details or {}
+        self.evaluation_data = evaluation_data or {}
+        self.evaluation_stage = evaluation_stage or "unknown_stage"
+
+        # Add to context
+        self.context.update(
+            {
+                "evaluation_context": self.evaluation_context,
+                "condition_details": self.condition_details,
+                "evaluation_data": self.evaluation_data,
+                "evaluation_stage": self.evaluation_stage,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for evaluation errors."""
+        return 422  # Unprocessable Entity
+
+
+class AlertCorrelationError(AlertError):
+    """
+    Exception raised when alert correlation and deduplication fails.
+
+    This exception is raised when alert correlation logic fails,
+    correlation key generation encounters errors, or when deduplication
+    operations fail.
+
+    Attributes:
+        correlation_operation: Correlation operation that failed
+        existing_alert_id: ID of existing correlated alert
+        correlation_data: Data used for correlation
+        deduplication_context: Context about deduplication attempt
+    """
+
+    def __init__(
+        self,
+        message: str,
+        correlation_operation: str | None = None,
+        existing_alert_id: str | None = None,
+        correlation_data: dict[str, Any] | None = None,
+        deduplication_context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize alert correlation error.
+
+        Args:
+            message: Human-readable error description
+            correlation_operation: Correlation operation that failed
+            existing_alert_id: ID of existing correlated alert
+            correlation_data: Data used for correlation
+            deduplication_context: Context about deduplication attempt
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, alert_operation="correlation", **kwargs)
+        self.correlation_operation = correlation_operation or "unknown_correlation"
+        self.existing_alert_id = existing_alert_id
+        self.correlation_data = correlation_data or {}
+        self.deduplication_context = deduplication_context or {}
+
+        # Add to context
+        self.context.update(
+            {
+                "correlation_operation": self.correlation_operation,
+                "existing_alert_id": existing_alert_id,
+                "correlation_data": self.correlation_data,
+                "deduplication_context": self.deduplication_context,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for correlation errors."""
+        return 409  # Conflict
+
+
+class AlertConfigurationError(AlertError):
+    """
+    Exception raised when alert configuration validation fails.
+
+    This exception is raised when alert service configuration is invalid,
+    alert rule configuration is malformed, or when configuration
+    validation encounters errors.
+
+    Attributes:
+        config_field: Configuration field that failed validation
+        config_value: Value that caused the error
+        validation_context: Additional validation context
+        suggested_fix: Suggested fix for the configuration error
+    """
+
+    def __init__(
+        self,
+        message: str,
+        config_field: str | None = None,
+        config_value: Any = None,
+        validation_context: dict[str, Any] | None = None,
+        suggested_fix: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize alert configuration error.
+
+        Args:
+            message: Human-readable error description
+            config_field: Configuration field that failed
+            config_value: Value that caused the error
+            validation_context: Additional validation context
+            suggested_fix: Suggested fix for the configuration error
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, alert_operation="configuration", **kwargs)
+        self.config_field = config_field
+        self.config_value = config_value
+        self.validation_context = validation_context or {}
+        self.suggested_fix = suggested_fix
+
+        # Add to context
+        self.context.update(
+            {
+                "config_field": config_field,
+                "config_value": str(config_value) if config_value else None,
+                "validation_context": self.validation_context,
+                "suggested_fix": suggested_fix,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for configuration errors."""
+        return 400  # Bad Request
+
+
+class AlertRateLimitError(AlertError):
+    """
+    Exception raised when alert rate limiting and throttling violations occur.
+
+    This exception is raised when alert frequency exceeds configured limits,
+    rate limiting rules are violated, or when throttling operations fail.
+
+    Attributes:
+        rate_limit_type: Type of rate limit that was violated
+        current_rate: Current alert rate that violated the limit
+        limit_value: The rate limit that was exceeded
+        time_window: Time window for rate limiting
+    """
+
+    def __init__(
+        self,
+        message: str,
+        rate_limit_type: str | None = None,
+        current_rate: float | None = None,
+        limit_value: float | None = None,
+        time_window: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize alert rate limit error.
+
+        Args:
+            message: Human-readable error description
+            rate_limit_type: Type of rate limit that was violated
+            current_rate: Current alert rate that violated the limit
+            limit_value: The rate limit that was exceeded
+            time_window: Time window for rate limiting
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, alert_operation="rate_limiting", **kwargs)
+        self.rate_limit_type = rate_limit_type or "unknown_limit"
+        self.current_rate = current_rate
+        self.limit_value = limit_value
+        self.time_window = time_window
+
+        # Add to context
+        self.context.update(
+            {
+                "rate_limit_type": self.rate_limit_type,
+                "current_rate": current_rate,
+                "limit_value": limit_value,
+                "time_window": time_window,
+                "violation_severity": (
+                    abs(current_rate - limit_value) / limit_value
+                    if current_rate is not None
+                    and limit_value is not None
+                    and limit_value != 0
+                    else None
+                ),
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for rate limit errors."""
+        return 429  # Too Many Requests
+
+
+class AlertChannelError(AlertError):
+    """
+    Exception raised when alert delivery channel configuration and connectivity fails.
+
+    This exception is raised when delivery channel configuration is invalid,
+    channel connectivity tests fail, or when channel-specific operations
+    encounter errors.
+
+    Attributes:
+        channel_name: Name of the delivery channel
+        channel_config: Configuration of the channel
+        connectivity_context: Context about connectivity issues
+        channel_operation: Channel operation that failed
+    """
+
+    def __init__(
+        self,
+        message: str,
+        channel_name: str | None = None,
+        channel_config: dict[str, Any] | None = None,
+        connectivity_context: dict[str, Any] | None = None,
+        channel_operation: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize alert channel error.
+
+        Args:
+            message: Human-readable error description
+            channel_name: Name of the delivery channel
+            channel_config: Configuration of the channel
+            connectivity_context: Context about connectivity issues
+            channel_operation: Channel operation that failed
+            **kwargs: Additional context passed to parent class
+        """
+        super().__init__(message, alert_operation="channel_management", **kwargs)
+        self.channel_name = channel_name or "unknown_channel"
+        self.channel_config = channel_config or {}
+        self.connectivity_context = connectivity_context or {}
+        self.channel_operation = channel_operation or "unknown_operation"
+
+        # Add to context
+        self.context.update(
+            {
+                "channel_name": self.channel_name,
+                "channel_config": self.channel_config,
+                "connectivity_context": self.connectivity_context,
+                "channel_operation": self.channel_operation,
+            }
+        )
+
+    def get_http_status_code(self) -> int:
+        """Get HTTP status code for channel errors."""
+        return 503  # Service Unavailable
+
+
+def create_alert_error_from_service_error(
+    service_error: ServiceError,
+    alert_operation: str | None = None,
+    alert_id: str | None = None,
+    alert_rule_id: str | None = None,
+) -> AlertError:
+    """
+    Convert a service error to an alert error with alert context.
+
+    Args:
+        service_error: The original service error
+        alert_operation: Alert operation that was being performed
+        alert_id: ID of the alert that caused the error
+        alert_rule_id: ID of the alert rule that caused the error
+
+    Returns:
+        AlertError with service context preserved
+    """
+    return AlertError(
+        message=f"Alert operation failed: {service_error}",
+        alert_operation=alert_operation,
+        alert_id=alert_id,
+        alert_rule_id=alert_rule_id,
+        context={
+            "original_error_type": service_error.__class__.__name__,
+            "service_context": service_error.to_dict(),
+        },
+    )

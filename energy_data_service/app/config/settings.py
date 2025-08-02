@@ -328,6 +328,141 @@ class MonitoringConfig(BaseModel):
     )
 
 
+class AlertConfig(BaseModel):
+    """Alert system configuration."""
+
+    # Alert evaluation settings
+    evaluation_interval_minutes: int = Field(
+        default=5,
+        description="Interval for alert rule evaluation in minutes",
+        ge=1,
+        le=60,
+    )
+    max_rules_per_evaluation: int = Field(
+        default=100,
+        description="Maximum rules to evaluate per cycle",
+        ge=10,
+        le=1000,
+    )
+
+    # Alert delivery settings
+    max_delivery_attempts: int = Field(
+        default=3,
+        description="Maximum delivery attempts for failed alerts",
+        ge=1,
+        le=10,
+    )
+    delivery_retry_delay_seconds: float = Field(
+        default=60.0,
+        description="Delay between retry attempts in seconds",
+        ge=30.0,
+        le=300.0,
+    )
+    delivery_timeout_seconds: float = Field(
+        default=30.0,
+        description="Timeout for delivery operations in seconds",
+        ge=5.0,
+        le=120.0,
+    )
+
+    # Rate limiting
+    max_alerts_per_rule_per_hour: int = Field(
+        default=10,
+        description="Maximum alerts per rule per hour",
+        ge=1,
+        le=100,
+    )
+    max_total_alerts_per_hour: int = Field(
+        default=1000,
+        description="Maximum total alerts per hour",
+        ge=100,
+        le=10000,
+    )
+    cooldown_override_minutes: int = Field(
+        default=5,
+        description="Global cooldown override in minutes",
+        ge=1,
+        le=60,
+    )
+
+    # Data retention
+    alert_retention_days: int = Field(
+        default=90,
+        description="Days to retain alert history",
+        ge=7,
+        le=365,
+    )
+    resolved_alert_retention_days: int = Field(
+        default=30,
+        description="Days to retain resolved alerts",
+        ge=7,
+        le=180,
+    )
+
+    # Delivery channels
+    email_enabled: bool = Field(
+        default=True,
+        description="Enable email alert delivery",
+    )
+    webhook_enabled: bool = Field(
+        default=True,
+        description="Enable webhook alert delivery",
+    )
+    email_timeout_seconds: float = Field(
+        default=30.0,
+        description="Email delivery timeout in seconds",
+        ge=10.0,
+        le=120.0,
+    )
+    webhook_timeout_seconds: float = Field(
+        default=10.0,
+        description="Webhook delivery timeout in seconds",
+        ge=5.0,
+        le=30.0,
+    )
+
+    # SMTP configuration
+    smtp_host: str = Field(
+        default="localhost",
+        description="SMTP server host",
+    )
+    smtp_port: int = Field(
+        default=587,
+        description="SMTP server port",
+        ge=25,
+        le=65535,
+    )
+    smtp_use_tls: bool = Field(
+        default=True,
+        description="Use TLS for SMTP connection",
+    )
+    smtp_username: str | None = Field(
+        default=None,
+        description="SMTP username for authentication",
+    )
+    smtp_password: SecretStr | None = Field(
+        default=None,
+        description="SMTP password for authentication",
+    )
+
+    # Default recipients
+    default_email_recipients: list[str] = Field(
+        default_factory=list,
+        description="List of default email recipients",
+    )
+    default_webhook_urls: list[str] = Field(
+        default_factory=list,
+        description="List of default webhook URLs",
+    )
+
+    @field_validator("smtp_port")  # type: ignore[misc]
+    @classmethod
+    def validate_smtp_port(cls, v: int) -> int:
+        if not MIN_PORT <= v <= MAX_PORT:
+            raise ConfigValidationError.invalid_database_port()
+        return v
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).parent.parent.parent
@@ -374,6 +509,10 @@ class Settings(BaseSettings):
         default_factory=MonitoringConfig,
         description="Monitoring configuration",
     )
+    alert: AlertConfig = Field(
+        default_factory=AlertConfig,
+        description="Alert system configuration",
+    )
 
     @field_validator("environment")  # type: ignore[misc]
     @classmethod
@@ -405,6 +544,12 @@ class Settings(BaseSettings):
                 del data["database"]["url"]
         if "entsoe_client" in data and "api_token" in data["entsoe_client"]:
             data["entsoe_client"]["api_token"] = REDACTED_VALUE
+        if (
+            "alert" in data
+            and "smtp_password" in data["alert"]
+            and data["alert"]["smtp_password"]
+        ):
+            data["alert"]["smtp_password"] = REDACTED_VALUE
         return data
 
 
