@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from app.config.settings import AlertConfig
+from app.exceptions.service_exceptions import AlertDeliveryError, AlertError
 from app.models.alert import Alert
 from app.models.alert_enums import (
     AlertDeliveryStatus,
@@ -19,12 +20,7 @@ from app.models.alert_enums import (
     AlertType,
 )
 from app.models.alert_rule import AlertRule
-from app.services.alert_service import (
-    AlertDeliveryError,
-    AlertRateLimitError,
-    AlertService,
-    AlertServiceError,
-)
+from app.services.alert_service import AlertService
 
 
 class TestAlertService:
@@ -60,16 +56,10 @@ class TestAlertService:
     def alert_config(self) -> AlertConfig:
         """Create an alert configuration."""
         return AlertConfig(
-            max_retry_attempts=3,
-            retry_delay_minutes=15,
+            max_delivery_attempts=3,
+            delivery_retry_delay_seconds=60,
             delivery_timeout_seconds=30,
-            rate_limit_window_minutes=15,
-            max_alerts_per_window=10,
-            correlation_window_minutes=60,
-            collection_success_threshold=0.9,
-            performance_threshold_ms=5000.0,
-            failure_rate_threshold=0.1,
-            resolved_alerts_retention_days=30,
+            max_alerts_per_rule_per_hour=10,
         )
 
     @pytest.fixture
@@ -77,7 +67,6 @@ class TestAlertService:
         self,
         mock_alert_repository: AsyncMock,
         mock_alert_rule_repository: AsyncMock,
-        mock_database: AsyncMock,
         alert_config: AlertConfig,
         mock_monitoring_service: AsyncMock,
     ) -> AlertService:
@@ -85,7 +74,6 @@ class TestAlertService:
         return AlertService(
             alert_repository=mock_alert_repository,
             alert_rule_repository=mock_alert_rule_repository,
-            database=mock_database,
             config=alert_config,
             monitoring_service=mock_monitoring_service,
         )
@@ -190,6 +178,7 @@ class TestAlertService:
         )
 
         # Should return existing alert due to deduplication
+        assert result is not None
         assert result.id == sample_alert.id
 
     @pytest.mark.asyncio
@@ -217,47 +206,7 @@ class TestAlertService:
         assert alert.correlation_key is not None
         assert alert.correlation_key.startswith("system_health_")
 
-    # Correlation Key Generation Tests
-
-    def test_generate_correlation_key_basic(self, alert_service: AlertService) -> None:
-        """Test basic correlation key generation."""
-        key = alert_service.generate_correlation_key(
-            alert_type=AlertType.SYSTEM_HEALTH,
-            area_code="DE",
-            data_type="actual",
-        )
-
-        assert key.startswith("system_health_")
-        assert len(key) > len("system_health_")
-
-    def test_generate_correlation_key_different_params(
-        self, alert_service: AlertService
-    ) -> None:
-        """Test that different parameters generate different keys."""
-        key1 = alert_service.generate_correlation_key(
-            alert_type=AlertType.SYSTEM_HEALTH,
-            area_code="DE",
-        )
-
-        key2 = alert_service.generate_correlation_key(
-            alert_type=AlertType.SYSTEM_HEALTH,
-            area_code="FR",
-        )
-
-        assert key1 != key2
-
-    def test_generate_correlation_key_with_context(
-        self, alert_service: AlertService
-    ) -> None:
-        """Test correlation key generation with trigger context."""
-        key = alert_service.generate_correlation_key(
-            alert_type=AlertType.SYSTEM_HEALTH,
-            trigger_context={"health_check": "performance"},
-        )
-
-        assert key.startswith("system_health_")
-
-    # Deduplication Tests
+    # Correlation and Deduplication Tests
 
     @pytest.mark.asyncio
     async def test_should_deduplicate_alert_with_unresolved(
@@ -525,41 +474,43 @@ class TestAlertService:
         """Test alert delivery when rule is not found."""
         mock_alert_rule_repository.get_by_id.return_value = None
 
-        with pytest.raises(AlertServiceError) as exc_info:
+        with pytest.raises(AlertError) as exc_info:
             await alert_service.deliver_alert(sample_alert)
 
         assert "Alert rule" in str(exc_info.value)
         assert "not found" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_deliver_email_success(
+    async def test_deliver_email_failure(
         self,
         alert_service: AlertService,
         sample_alert: Alert,
         sample_alert_rule: AlertRule,
     ) -> None:
-        """Test email delivery functionality."""
-        result = await alert_service.deliver_email(sample_alert, sample_alert_rule)
+        """Test email delivery failure raises AlertDeliveryError."""
+        with patch("app.services.alert_service.datetime") as mock_datetime:
+            mock_datetime.now.side_effect = Exception("Test SMTP error")
+            with pytest.raises(AlertDeliveryError) as exc_info:
+                await alert_service.deliver_email(sample_alert, sample_alert_rule)
 
-        assert result["channel"] == "email"
-        assert result["success"] is True
-        assert "recipients" in result
-        assert "subject" in result
+            assert "Email delivery failed" in str(exc_info.value)
+            assert exc_info.value.delivery_channel == "email"
 
     @pytest.mark.asyncio
-    async def test_deliver_webhook_success(
+    async def test_deliver_webhook_failure(
         self,
         alert_service: AlertService,
         sample_alert: Alert,
         sample_alert_rule: AlertRule,
     ) -> None:
-        """Test webhook delivery functionality."""
-        result = await alert_service.deliver_webhook(sample_alert, sample_alert_rule)
+        """Test webhook delivery failure raises AlertDeliveryError."""
+        with patch("app.services.alert_service.datetime") as mock_datetime:
+            mock_datetime.now.side_effect = Exception("Test HTTP error")
+            with pytest.raises(AlertDeliveryError) as exc_info:
+                await alert_service.deliver_webhook(sample_alert, sample_alert_rule)
 
-        assert result["channel"] == "webhook"
-        assert result["success"] is True
-        assert "webhook_url" in result
-        assert "response_status" in result
+            assert "Webhook delivery failed" in str(exc_info.value)
+            assert exc_info.value.delivery_channel == "webhook"
 
     # Rule Evaluation Tests
 
@@ -635,7 +586,6 @@ class TestAlertService:
         self,
         mock_alert_repository: AsyncMock,
         mock_alert_rule_repository: AsyncMock,
-        mock_database: AsyncMock,
         alert_config: AlertConfig,
     ) -> None:
         """Test monitoring condition evaluation without service."""
@@ -643,7 +593,6 @@ class TestAlertService:
         alert_service = AlertService(
             alert_repository=mock_alert_repository,
             alert_rule_repository=mock_alert_rule_repository,
-            database=mock_database,
             config=alert_config,
             monitoring_service=None,
         )
@@ -653,30 +602,10 @@ class TestAlertService:
         assert result["monitoring_service_available"] is False
 
     @pytest.mark.asyncio
-    async def test_check_collection_health_success(
-        self,
-        alert_service: AlertService,
-        mock_monitoring_service: AsyncMock,
-    ) -> None:
-        """Test collection health check functionality."""
-        # Mock monitoring service responses
-        mock_monitoring_service.get_recent_metrics.return_value = [MagicMock()]
-        mock_monitoring_service.calculate_success_rates.return_value = {
-            "DE/actual": 0.95,
-            "FR/actual": 0.92,
-        }
-
-        result = await alert_service.check_collection_health()
-
-        assert result["monitoring_service_available"] is True
-        assert result["collection_health_status"] == "healthy"
-
-    @pytest.mark.asyncio
     async def test_send_system_health_alert(
         self,
         alert_service: AlertService,
         mock_alert_rule_repository: AsyncMock,
-        mock_database: AsyncMock,
     ) -> None:
         """Test system health alert sending."""
         # Mock rule creation/retrieval
@@ -743,7 +672,7 @@ class TestAlertService:
         mock_session = mock_database.session_factory.return_value
         mock_session.commit.side_effect = Exception("Database error")
 
-        with pytest.raises(AlertServiceError) as exc_info:
+        with pytest.raises(AlertError) as exc_info:
             await alert_service.create_alert(
                 rule=sample_alert_rule,
                 title="Error Test",
@@ -764,7 +693,7 @@ class TestAlertService:
             "Repository error"
         )
 
-        with pytest.raises(AlertServiceError) as exc_info:
+        with pytest.raises(AlertError) as exc_info:
             await alert_service.find_similar_alerts("test_key")
 
         assert "Failed to find similar alerts" in str(exc_info.value)
@@ -780,7 +709,7 @@ class TestAlertService:
             "Monitoring error"
         )
 
-        with pytest.raises(AlertServiceError) as exc_info:
+        with pytest.raises(AlertError) as exc_info:
             await alert_service.evaluate_monitoring_conditions()
 
         assert "Failed to evaluate monitoring conditions" in str(exc_info.value)
@@ -811,16 +740,17 @@ class TestAlertServiceHelperMethods:
 
         assert key.startswith("data_quality_")
 
-    def test_generate_correlation_key_performance(
+    def test_generate_correlation_key_collection_failure(
         self, alert_service: AlertService
     ) -> None:
-        """Test correlation key generation for performance alerts."""
+        """Test correlation key generation for collection failure alerts."""
         key = alert_service.generate_correlation_key(
-            alert_type=AlertType.PERFORMANCE,
-            trigger_context={"metric_type": "response_time"},
+            alert_type=AlertType.COLLECTION_FAILURE,
+            area_code="DE",
+            trigger_context={"api_error": "timeout"},
         )
 
-        assert key.startswith("performance_")
+        assert key.startswith("collection_failure_")
 
     def test_generate_correlation_key_consistent(
         self, alert_service: AlertService

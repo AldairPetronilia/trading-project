@@ -60,7 +60,7 @@ class Alert(TimestampedModel):
         resolved_at: Timestamp when the alert condition was resolved (if applicable)
         resolved_by: Identifier of who/what resolved the alert
         resolution_notes: Notes about how the alert was resolved
-        metadata: Additional JSON metadata for extensibility
+        alert_metadata: Additional JSON metadata for extensibility
         created_at: Timestamp when this alert was created (inherited)
         updated_at: Timestamp when this alert was last updated (inherited)
     """
@@ -206,7 +206,7 @@ class Alert(TimestampedModel):
     )
 
     # Extensibility
-    metadata: Mapped[dict[str, Any]] = mapped_column(
+    alert_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSON,
         nullable=False,
         default=dict,
@@ -360,7 +360,7 @@ class Alert(TimestampedModel):
 
     def get_metadata_value(self, key: str, default: Any = None) -> Any:
         """
-        Get a specific value from the metadata.
+        Get a specific value from the alert_metadata.
 
         Args:
             key: The metadata key to retrieve
@@ -369,7 +369,7 @@ class Alert(TimestampedModel):
         Returns:
             The metadata value or default if not found
         """
-        return self.metadata.get(key, default)
+        return self.alert_metadata.get(key, default)
 
     def add_delivery_attempt(
         self,

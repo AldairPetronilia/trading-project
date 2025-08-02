@@ -95,7 +95,6 @@ class Container(containers.DeclarativeContainer):
         AlertService,
         alert_repository=alert_repository,
         alert_rule_repository=alert_rule_repository,
-        database=database,
         config=providers.Callable(lambda c: c.alert, config),
         monitoring_service=monitoring_service,
     )

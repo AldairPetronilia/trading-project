@@ -30,12 +30,14 @@ class AlertType(str, Enum):
         DATA_QUALITY: Alerts for data integrity issues, missing data, or validation failures
         SYSTEM_HEALTH: Alerts for system performance, availability, and operational issues
         COLLECTION_FAILURE: Alerts for data collection failures and API connectivity issues
+        PERFORMANCE: Alerts for performance-related issues, such as high latency or low throughput
     """
 
     PRICE_THRESHOLD = "price_threshold"
     DATA_QUALITY = "data_quality"
     SYSTEM_HEALTH = "system_health"
     COLLECTION_FAILURE = "collection_failure"
+    PERFORMANCE = "performance"
 
 
 class AlertSeverity(str, Enum):

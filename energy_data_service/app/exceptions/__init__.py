@@ -1,5 +1,15 @@
+from exceptions.service_exceptions import AlertCorrelationError, AlertDeliveryError
+
 from .config_validation_error import ConfigValidationError
 from .service_exceptions import (
+    AlertChannelError,
+    AlertConfigurationError,
+    AlertCorrelationError,
+    AlertDeliveryError,
+    AlertError,
+    AlertEvaluationError,
+    AlertRateLimitError,
+    AlertRuleError,
     BackfillCoverageError,
     BackfillDataQualityError,
     BackfillError,
@@ -14,6 +24,14 @@ from .service_exceptions import (
 )
 
 __all__ = [
+    "AlertChannelError",
+    "AlertConfigurationError",
+    "AlertCorrelationError",
+    "AlertDeliveryError",
+    "AlertError",
+    "AlertEvaluationError",
+    "AlertRateLimitError",
+    "AlertRuleError",
     "BackfillCoverageError",
     "BackfillDataQualityError",
     "BackfillError",

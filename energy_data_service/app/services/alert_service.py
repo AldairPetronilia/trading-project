@@ -23,7 +23,11 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from app.exceptions.service_exceptions import ServiceError
+from app.exceptions.service_exceptions import (
+    AlertDeliveryError,
+    AlertError,
+    ServiceError,
+)
 from app.models.alert import Alert
 from app.models.alert_enums import AlertDeliveryStatus, AlertSeverity, AlertType
 from app.models.alert_rule import AlertRule
@@ -46,94 +50,6 @@ DEFAULT_CORRELATION_WINDOW_MINUTES = 60
 DEFAULT_DELIVERY_TIMEOUT_SECONDS = 30
 DEFAULT_MAX_RETRY_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_MINUTES = 15
-
-
-class AlertServiceError(ServiceError):
-    """Exception for alert service operations."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        alert_operation: str | None = None,
-        context: dict[str, Any] | None = None,
-    ) -> None:
-        """Initialize alert service error with operation context.
-
-        Args:
-            message: Human-readable error description
-            alert_operation: Specific alert operation that failed
-            context: Additional context information for debugging
-        """
-        super().__init__(
-            message,
-            service_name="AlertService",
-            operation=alert_operation or "unknown_alert_operation",
-            context=context,
-        )
-
-
-class AlertDeliveryError(AlertServiceError):
-    """Exception for alert delivery operations."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        delivery_channel: str | None = None,
-        alert_id: int | None = None,
-        context: dict[str, Any] | None = None,
-    ) -> None:
-        """Initialize alert delivery error with delivery context.
-
-        Args:
-            message: Human-readable error description
-            delivery_channel: Channel that failed (email, webhook)
-            alert_id: ID of alert that failed delivery
-            context: Additional context information for debugging
-        """
-        super().__init__(
-            message,
-            alert_operation="alert_delivery",
-            context={
-                "delivery_channel": delivery_channel,
-                "alert_id": alert_id,
-                **(context or {}),
-            },
-        )
-
-
-class AlertRateLimitError(AlertServiceError):
-    """Exception for alert rate limiting violations."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        rate_limit_type: str | None = None,
-        current_count: int | None = None,
-        limit_threshold: int | None = None,
-        context: dict[str, Any] | None = None,
-    ) -> None:
-        """Initialize alert rate limit error with rate limiting context.
-
-        Args:
-            message: Human-readable error description
-            rate_limit_type: Type of rate limit violated
-            current_count: Current count that exceeded limit
-            limit_threshold: Threshold that was exceeded
-            context: Additional context information for debugging
-        """
-        super().__init__(
-            message,
-            alert_operation="rate_limiting",
-            context={
-                "rate_limit_type": rate_limit_type,
-                "current_count": current_count,
-                "limit_threshold": limit_threshold,
-                **(context or {}),
-            },
-        )
 
 
 class AlertService:
@@ -160,7 +76,6 @@ class AlertService:
         self,
         alert_repository: AlertRepository,
         alert_rule_repository: AlertRuleRepository,
-        database: Database,
         config: AlertConfig,
         monitoring_service: MonitoringService | None = None,
     ) -> None:
@@ -170,13 +85,11 @@ class AlertService:
         Args:
             alert_repository: Repository for alert data operations
             alert_rule_repository: Repository for alert rule operations
-            database: Database instance for transaction management
             config: Alert configuration settings
             monitoring_service: Optional monitoring service for health integration
         """
         self._alert_repository = alert_repository
         self._alert_rule_repository = alert_rule_repository
-        self._database = database
         self._config = config
         self._monitoring_service = monitoring_service
 
@@ -193,7 +106,7 @@ class AlertService:
             Dictionary with evaluation results including triggered alerts and metrics
 
         Raises:
-            AlertServiceError: If rule evaluation fails
+            AlertError: If rule evaluation fails
         """
         try:
             # Get all active rules ready for evaluation
@@ -264,7 +177,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to evaluate alert rules: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="evaluate_alert_rules",
                 context={"error_type": type(e).__name__},
@@ -301,7 +214,7 @@ class AlertService:
             Created Alert instance
 
         Raises:
-            AlertServiceError: If alert creation fails
+            AlertError: If alert creation fails
         """
         try:
             # Generate correlation key if not provided
@@ -339,11 +252,8 @@ class AlertService:
                 delivery_status=AlertDeliveryStatus.PENDING,
             )
 
-            # Save alert to database
-            async with self._database.session_factory() as session:
-                session.add(alert)
-                await session.commit()
-                await session.refresh(alert)
+            # Save alert to database using the repository
+            alert = await self._alert_repository.create(alert)
 
             # Update rule trigger information
             await self._alert_rule_repository.update_trigger_info(rule.id)
@@ -357,7 +267,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to create alert for rule {rule.name}: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="create_alert",
                 context={
@@ -387,7 +297,7 @@ class AlertService:
             Updated Alert instance if found, None otherwise
 
         Raises:
-            AlertServiceError: If alert resolution fails
+            AlertError: If alert resolution fails
         """
         try:
             alert = await self._alert_repository.mark_alert_resolved(
@@ -411,7 +321,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to resolve alert {alert_id}: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="resolve_alert",
                 context={"alert_id": alert_id, "resolved_by": resolved_by},
@@ -440,7 +350,7 @@ class AlertService:
             List of active Alert instances
 
         Raises:
-            AlertServiceError: If retrieval fails
+            AlertError: If retrieval fails
         """
         try:
             alerts = await self._alert_repository.get_unresolved_alerts()
@@ -467,7 +377,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to get active alerts: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="get_active_alerts",
                 context={
@@ -494,7 +404,7 @@ class AlertService:
             List of alerts with matching correlation key
 
         Raises:
-            AlertServiceError: If search fails
+            AlertError: If search fails
         """
         try:
             if window_minutes is None:
@@ -523,7 +433,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to find similar alerts: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="find_similar_alerts",
                 context={
@@ -548,7 +458,7 @@ class AlertService:
             True if alert should be deduplicated, False otherwise
 
         Raises:
-            AlertServiceError: If deduplication check fails
+            AlertError: If deduplication check fails
         """
         try:
             similar_alerts = await self.find_similar_alerts(
@@ -567,7 +477,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to check alert deduplication: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="should_deduplicate_alert",
                 context={"correlation_key": correlation_key},
@@ -636,13 +546,13 @@ class AlertService:
             Dictionary with delivery results per channel
 
         Raises:
-            AlertServiceError: If delivery configuration fails
+            AlertError: If delivery configuration fails
         """
         try:
             # Get alert rule to determine delivery channels
             rule = await self._alert_rule_repository.get_by_id(alert.alert_rule_id)
             if not rule:
-                raise AlertServiceError(
+                raise AlertError(
                     f"Alert rule {alert.alert_rule_id} not found for alert {alert.id}",
                     alert_operation="deliver_alert",
                 )
@@ -708,7 +618,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to deliver alert {alert.id}: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="deliver_alert",
                 context={"alert_id": alert.id},
@@ -749,9 +659,11 @@ class AlertService:
         except Exception as e:
             error_msg = f"Email delivery failed for alert {alert.id}: {e}"
             raise AlertDeliveryError(
-                error_msg,
+                message=error_msg,
                 delivery_channel="email",
-                alert_id=alert.id,
+                channel_type="email",
+                alert_id=str(alert.id),
+                delivery_context={"recipients": email_config.get("recipients", [])},
             ) from e
         else:
             return result
@@ -789,9 +701,11 @@ class AlertService:
         except Exception as e:
             error_msg = f"Webhook delivery failed for alert {alert.id}: {e}"
             raise AlertDeliveryError(
-                error_msg,
+                message=error_msg,
                 delivery_channel="webhook",
-                alert_id=alert.id,
+                channel_type="webhook",
+                alert_id=str(alert.id),
+                delivery_context={"url": webhook_config.get("url", "")},
             ) from e
         else:
             return result
@@ -804,7 +718,7 @@ class AlertService:
             Dictionary with retry operation results
 
         Raises:
-            AlertServiceError: If retry operation fails
+            AlertError: If retry operation fails
         """
         try:
             max_attempts = getattr(
@@ -865,7 +779,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to retry alert deliveries: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="retry_failed_deliveries",
             ) from e
@@ -885,7 +799,7 @@ class AlertService:
             Dictionary with monitoring evaluation results
 
         Raises:
-            AlertServiceError: If monitoring evaluation fails
+            AlertError: If monitoring evaluation fails
         """
         try:
             if not self._monitoring_service:
@@ -941,7 +855,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to evaluate monitoring conditions: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="evaluate_monitoring_conditions",
                 context={"period_seconds": period.total_seconds()},
@@ -957,7 +871,7 @@ class AlertService:
             Dictionary with collection health assessment
 
         Raises:
-            AlertServiceError: If collection health check fails
+            AlertError: If collection health check fails
         """
         try:
             if not self._monitoring_service:
@@ -1023,7 +937,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to check collection health: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="check_collection_health",
             ) from e
@@ -1050,7 +964,7 @@ class AlertService:
             Created Alert instance or None if deduplicated
 
         Raises:
-            AlertServiceError: If system health alert creation fails
+            AlertError: If system health alert creation fails
         """
         try:
             # Find or create a system health alert rule
@@ -1077,7 +991,7 @@ class AlertService:
 
         except Exception as e:
             error_msg = f"Failed to send system health alert: {e}"
-            raise AlertServiceError(
+            raise AlertError(
                 error_msg,
                 alert_operation="send_system_health_alert",
                 context={"title": title, "severity": severity.value},
@@ -1222,9 +1136,6 @@ class AlertService:
                 cooldown_minutes=30,
             )
 
-            async with self._database.session_factory() as session:
-                session.add(rule)
-                await session.commit()
-                await session.refresh(rule)
+            rule = await self._alert_rule_repository.create(rule)
 
         return rule
