@@ -271,15 +271,157 @@ The `energy_data_service` follows **Clean Architecture principles**. The data fl
 
 ## Testing Philosophy: The Cornerstone of Quality
 
-Testing is not optional. We enforce a rigorous testing strategy to ensure reliability.
+Testing is not optional. We enforce a rigorous testing strategy to ensure reliability in our production energy trading system. Our approach follows the **Testing Pyramid** methodology, which guides us to invest testing effort where it returns the most value while maintaining optimal speed and cost efficiency.
 
-- **Always add tests** for new features or bug fixes.
-- **Unit Tests (`tests/app/`)**: For testing pure business logic, transformations, and individual components in
-  isolation.
-- **Integration Tests (`tests/integration/`)**: These tests validate
-  the entire pipeline, from service calls to database interactions. We use **Testcontainers** to spin up a real
-  TimescaleDB instance for every test run, ensuring that our code works with a real database.
-- Follow the test pyramid
+### The Testing Pyramid: Our Foundation
+
+The testing pyramid is a thinking tool that helps us create a balanced, efficient testing strategy. It consists of three main layers, each serving a distinct purpose in our quality assurance process:
+
+```
+        /\
+       /  \     10% - End-to-End Tests
+      /____\    (Complete workflows, user journeys)
+     /      \
+    /        \  20% - Integration Tests
+   /__________\ (Component interactions, database, APIs)
+  /            \
+ /              \ 70% - Unit Tests
+/________________\ (Pure logic, transformations, calculations)
+```
+
+### Test Distribution Guidelines
+
+Our target distribution follows industry best practices adapted for energy trading systems:
+
+- **70% Unit Tests**: Fast, isolated tests for business logic and transformations
+- **20% Integration Tests**: Component interactions, database operations, service orchestration
+- **10% End-to-End Tests**: Complete workflows from data collection to storage and retrieval
+
+### Test Categories and Implementation
+
+#### 1. Unit Tests (`tests/app/`) - Foundation Layer (70%)
+
+**Purpose**: Validate individual components in complete isolation using mocks and stubs.
+
+**What to Test**:
+- **Pure Business Logic**: Price calculations, energy consumption formulas, trading algorithms
+- **Data Transformations**: ENTSO-E XML parsing, data model conversions, validation rules
+- **Individual Methods**: Repository methods, service operations, processor functions
+- **Error Handling**: Exception scenarios, edge cases, boundary conditions
+
+**Examples**:
+```python
+# Energy price calculation logic
+def test_calculate_hourly_average_price()
+
+# Data validation and transformation
+def test_transform_entsoe_xml_to_energy_data_point()
+
+# Business rule validation
+def test_validate_trading_window_constraints()
+```
+
+#### 2. Integration Tests (`tests/integration/`) - Middle Layer (20%)
+
+**Purpose**: Validate component interactions and external dependencies using real database and mocked external APIs.
+
+**What to Test**:
+- **Database Operations**: TimescaleDB hypertable interactions, time-series queries, data persistence
+- **Service Orchestration**: BackfillService coordination, data collection pipelines, dependency injection
+- **Repository Patterns**: Complex queries, transaction handling, data integrity
+- **Component Interactions**: Collector → Processor → Repository workflows
+
+**Key Features**:
+- **Real TimescaleDB**: Using Testcontainers for authentic database testing
+- **Mocked External APIs**: ENTSO-E client calls stubbed for reliability
+- **Full Dependency Injection**: Testing complete container resolution
+
+**Examples**:
+```python
+# Complete data collection workflow
+def test_collect_process_store_energy_data_integration()
+
+# Backfill service with real database
+def test_backfill_service_resume_operation_integration()
+
+# Repository complex queries
+def test_energy_data_repository_time_range_queries()
+```
+
+#### 3. End-to-End Tests (Future Implementation) - Top Layer (10%)
+
+**Purpose**: Validate complete user workflows and system behavior from external perspective.
+
+**What to Test**:
+- **Complete Data Pipelines**: From external API to database storage and retrieval
+- **Scheduler Operations**: Automated data collection cycles, backfill processes
+- **System Recovery**: Failure scenarios, restart behavior, data consistency
+- **Performance Under Load**: High-volume data scenarios, concurrent operations
+
+**Implementation Strategy**:
+- Run against staging environment with production-like data volumes
+- Include real ENTSO-E API calls (rate-limited for testing)
+- Validate data quality and completeness over time windows
+
+### Test Execution Strategy
+
+#### Development Workflow
+```bash
+# Fast feedback loop during development (< 5 seconds)
+uv run pytest tests/app/ -x --ff
+
+# Pre-commit validation (< 2 minutes)
+uv run pytest tests/app/ tests/integration/
+
+# Full test suite (< 5 minutes)
+uv run pytest
+```
+
+### Anti-Patterns to Avoid
+
+#### The Ice Cream Cone (Inverted Pyramid)
+Never prioritize slow E2E tests over fast unit tests. This leads to:
+- Slow feedback loops during development
+- Expensive test maintenance
+- Brittle test suites that break frequently
+
+#### Over-Mocking in Integration Tests
+While unit tests should mock extensively, integration tests should use real dependencies where possible:
+- Use real TimescaleDB instances (via Testcontainers)
+- Mock only external APIs that are unreliable or rate-limited
+- Prefer fakes over mocks for internal dependencies
+
+#### Testing Implementation Details
+Focus on behavior, not implementation:
+- Test public interfaces, not private methods
+- Validate outcomes, not internal state changes
+- Write tests that survive refactoring
+
+### Quality Metrics and Coverage
+
+#### Coverage Targets
+- **Unit Tests**: 90%+ coverage of pure business logic
+- **Integration Tests**: 100% of critical data paths
+- **Overall**: 85%+ total coverage (prioritize quality over percentage)
+
+#### Quality Over Quantity
+- High coverage percentage is valuable, but test quality is paramount
+- Focus on testing critical business logic and error scenarios
+- Avoid writing tests just to increase coverage metrics
+
+### Testing Tools and Infrastructure
+
+#### Primary Testing Stack
+- **pytest**: Primary testing framework with extensive plugin ecosystem
+- **pytest-asyncio**: For testing async/await patterns in collectors and services
+- **Testcontainers**: Real TimescaleDB instances for integration testing
+- **pytest-benchmark**: Performance regression detection
+- **pytest-cov**: Coverage reporting and analysis
+
+#### Development Tools
+- **pytest-xdist**: Parallel test execution for faster feedback
+- **pytest-mock**: Enhanced mocking capabilities
+- **pytest-factoryboy**: Test data generation for complex models
 
 ### Running Tests
 
