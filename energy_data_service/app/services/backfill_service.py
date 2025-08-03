@@ -260,7 +260,7 @@ class BackfillService:
         try:
             # Use defaults if not specified
             if areas is None:
-                areas = [AreaCode.GERMANY, AreaCode.FRANCE, AreaCode.NETHERLANDS]
+                areas = [AreaCode.DE_LU, AreaCode.DE_AT_LU]
             if endpoints is None:
                 endpoints = list(self.ENDPOINT_INTERVALS.keys())
             if years_back is None:
