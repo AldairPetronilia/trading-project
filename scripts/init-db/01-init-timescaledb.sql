@@ -1,9 +1,10 @@
--- Minimal initialization script for TimescaleDB
+-- TimescaleDB initialization script
 -- This script runs automatically when the container starts for the first time
--- Only creates the TimescaleDB extension - everything else will be done programmatically
+-- Sets up TimescaleDB extension and database-level optimizations
 
 -- Create TimescaleDB extension
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
--- That's it! Everything else (schemas, tables, permissions) will be handled
--- by SQLAlchemy models and Alembic migrations in the application code
+-- Note: Hypertable creation and compression will be handled by the application
+-- since they depend on the table structure defined by SQLAlchemy models.
+-- This ensures proper coordination between schema creation and TimescaleDB features.

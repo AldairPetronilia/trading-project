@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from entsoe_client.exceptions.entsoe_api_request_error import EntsoEApiRequestError
@@ -72,8 +72,8 @@ class EntsoEApiRequest:
     def to_parameter_map(self) -> dict[str, str]:
         params = {
             "documentType": self.document_type.code,
-            "periodStart": self._format_datetime(self.period_start),
-            "periodEnd": self._format_datetime(self.period_end),
+            "periodStart": self._format_datetime(self.period_start, 0),
+            "periodEnd": self._format_datetime(self.period_end, 1),
         }
 
         def _add_if_not_none(key: str, value: Any) -> None:
@@ -81,7 +81,7 @@ class EntsoEApiRequest:
                 if hasattr(value, "code") or hasattr(value, "value"):
                     params[key] = self._get_enum_code(value)
                 elif isinstance(value, datetime):
-                    params[key] = self._format_datetime(value)
+                    params[key] = self._format_datetime(value, 0)
                 else:
                     params[key] = str(value)
 
@@ -124,8 +124,45 @@ class EntsoEApiRequest:
 
         return params
 
-    def _format_datetime(self, dt: datetime) -> str:
-        return dt.strftime("%Y%m%d%H%M")
+    def _format_datetime(self, dt: datetime, offset: int) -> str:
+        """
+        Format datetime to ENTSO-E API format (YYYYMMDDHHMM) with quarter-hour alignment.
+
+        Args:
+            dt: The datetime to format
+            offset: 0 for period_start (round down), 1 for period_end (round up)
+
+        Returns:
+            Formatted datetime string aligned to nearest quarter hour
+        """
+        return self._align_to_quarter_hour(dt, offset).strftime("%Y%m%d%H%M")
+
+    def _align_to_quarter_hour(self, dt: datetime, offset: int) -> datetime:
+        """
+        Align datetime to quarter hour boundaries as required by ENTSO-E API.
+
+        Args:
+            dt: The datetime to align
+            offset: 0 for period_start (round down), 1 for period_end (round up)
+
+        Returns:
+            Aligned datetime with seconds and microseconds zeroed
+        """
+        # Reset seconds and microseconds
+        aligned = dt.replace(second=0, microsecond=0)
+
+        # Calculate aligned minute
+        quarter_hour_minute = (aligned.minute // 15 + offset) * 15
+
+        # Handle hour overflow when minute becomes 60
+        minutes_per_hour = 60
+        if quarter_hour_minute >= minutes_per_hour:
+            # Use timedelta to properly handle hour overflow
+            aligned = aligned.replace(minute=0) + timedelta(hours=1)
+        else:
+            aligned = aligned.replace(minute=quarter_hour_minute)
+
+        return aligned
 
     def _get_enum_code(self, enum_value: Any) -> str:
         if hasattr(enum_value, "code"):

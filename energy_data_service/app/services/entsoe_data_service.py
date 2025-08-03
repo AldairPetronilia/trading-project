@@ -237,7 +237,7 @@ class EntsoEDataService:
             Nested dictionary mapping area codes to endpoint results
         """
         # Default areas for MVP - this could come from configuration
-        areas = [AreaCode.GERMANY, AreaCode.FRANCE, AreaCode.NETHERLANDS]
+        areas = [AreaCode.DE_LU, AreaCode.DE_AT_LU]
         results = {}
 
         for area in areas:

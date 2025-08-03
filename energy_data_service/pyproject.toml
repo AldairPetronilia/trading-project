@@ -28,6 +28,7 @@ entsoe-client = { workspace = true }
 dev = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.0.0",
+    "pytest-xdist>=3.6.0",
     "testcontainers>=4.12.0",
 ]
 
@@ -38,3 +39,7 @@ package-dir = {"" = "."}
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+addopts = "-n auto --dist worksteal"
+asyncio_mode = "auto"

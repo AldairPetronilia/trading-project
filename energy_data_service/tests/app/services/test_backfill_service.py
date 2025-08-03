@@ -135,8 +135,8 @@ class TestBackfillService:
 
         results = await backfill_service.analyze_coverage()
 
-        # Should analyze 3 default areas and 6 default endpoints
-        assert len(results) == 18  # 3 areas * 6 endpoints
+        # Should analyze 2 default areas and 6 default endpoints
+        assert len(results) == 12  # 2 areas * 6 endpoints
         assert all(isinstance(result, CoverageAnalysis) for result in results)
 
     @pytest.mark.asyncio
