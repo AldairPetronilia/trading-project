@@ -50,5 +50,6 @@ logs/
 
 # Database data (local storage)
 data/timescaledb/
+data/grafana
 
 repomix-output.xml
