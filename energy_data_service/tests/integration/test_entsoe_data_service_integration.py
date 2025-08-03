@@ -201,7 +201,90 @@ def create_sample_gl_market_document(
         receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
         createdDateTime=base_time,
         timePeriodTimeInterval=time_interval,
-        timeSeries=time_series,
+        timeSeries=[time_series],
+    )
+
+
+def create_multiple_time_series_document(
+    area_code: AreaCode, process_type: ProcessType = ProcessType.REALISED
+) -> GlMarketDocument:
+    """Create a GL_MarketDocument with multiple TimeSeries for testing Phase 3 functionality."""
+    base_time = datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC)
+
+    # Create first TimeSeries (short period - 1 point)
+    time_interval_ts1 = LoadTimeInterval(
+        start=base_time,
+        end=base_time + timedelta(hours=1),
+    )
+
+    points_ts1 = [LoadPoint(position=1, quantity=1500.0)]
+
+    period_ts1 = LoadPeriod(
+        timeInterval=time_interval_ts1,
+        resolution="PT60M",
+        points=points_ts1,
+    )
+
+    time_series_1 = LoadTimeSeries(
+        mRID="1",  # Document-scoped counter
+        businessType=BusinessType.CONSUMPTION,
+        objectAggregation=ObjectAggregation.AGGREGATED,
+        outBiddingZoneDomainMRID=DomainMRID(area_code=area_code),
+        quantityMeasureUnitName="MAW",
+        curveType=CurveType.SEQUENTIAL_FIXED_SIZE_BLOCK,
+        period=period_ts1,
+    )
+
+    # Create second TimeSeries (longer period - multiple points)
+    time_interval_ts2 = LoadTimeInterval(
+        start=base_time + timedelta(minutes=30),  # Overlapping (12:30)
+        end=base_time + timedelta(hours=3, minutes=15),  # End at 15:15 for 11 points
+    )
+
+    points_ts2 = [
+        LoadPoint(position=i, quantity=1600.0 + (i * 50))
+        for i in range(1, 12)  # 11 points for ~2.75 hours at 15-min intervals
+    ]
+
+    period_ts2 = LoadPeriod(
+        timeInterval=time_interval_ts2,
+        resolution="PT15M",  # Different resolution
+        points=points_ts2,
+    )
+
+    time_series_2 = LoadTimeSeries(
+        mRID="2",  # Document-scoped counter
+        businessType=BusinessType.CONSUMPTION,
+        objectAggregation=ObjectAggregation.AGGREGATED,
+        outBiddingZoneDomainMRID=DomainMRID(area_code=area_code),
+        quantityMeasureUnitName="MAW",
+        curveType=CurveType.SEQUENTIAL_FIXED_SIZE_BLOCK,
+        period=period_ts2,
+    )
+
+    # Overall document time interval covers both TimeSeries
+    document_time_interval = LoadTimeInterval(
+        start=base_time,
+        end=base_time + timedelta(hours=3, minutes=15),  # Match TS2 end time
+    )
+
+    # Create the main document with MULTIPLE TimeSeries
+    return GlMarketDocument(
+        mRID=f"multi-ts-document-{area_code.area_code}",
+        revisionNumber=1,
+        type=DocumentType.SYSTEM_TOTAL_LOAD,
+        processType=process_type,
+        senderMarketParticipantMRID=MarketParticipantMRID(
+            value="10X1001A1001A450", coding_scheme=None
+        ),
+        senderMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
+        receiverMarketParticipantMRID=MarketParticipantMRID(
+            value="10X1001A1001A450", coding_scheme=None
+        ),
+        receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
+        createdDateTime=base_time,
+        timePeriodTimeInterval=document_time_interval,
+        timeSeries=[time_series_1, time_series_2],
     )
 
 
@@ -1070,21 +1153,22 @@ class TestEntsoEDataServiceIntegration:
             large_points.append(point)
 
         # Update the sample document with more data points
-        sample_gl_market_document.timeSeries.period.points = large_points
+        sample_gl_market_document.timeSeries[0].period.points = large_points
 
         # Configure mock collector to return the large document
         mock_collector = entsoe_data_service_with_real_db._collector
-        # Override the mock collector method to return the large document
-        mock_collector.get_actual_total_load = AsyncMock(
-            return_value=sample_gl_market_document
-        )
 
         # Measure processing time
         process_start = time.time()
 
-        result = await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
-            AreaCode.DE_LU, EndpointNames.ACTUAL_LOAD
-        )
+        # Override the mock collector method to return the large document
+        with patch.object(
+            mock_collector, "get_actual_total_load", new_callable=AsyncMock
+        ) as mock_method:
+            mock_method.return_value = sample_gl_market_document
+            result = await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                AreaCode.DE_LU, EndpointNames.ACTUAL_LOAD
+            )
 
         process_end = time.time()
         process_duration = process_end - process_start
@@ -1206,3 +1290,109 @@ class TestEntsoEDataServiceIntegration:
 
             # Verify successful result
             assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_collect_gaps_with_multiple_time_series(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test gap collection handles multiple TimeSeries correctly (Phase 3 requirement)."""
+        # Create a document with multiple TimeSeries to simulate real ENTSO-E response
+        multi_ts_document = create_multiple_time_series_document(AreaCode.DE_LU)
+
+        # Verify database starts empty
+        initial_records = await energy_repository.get_all()
+        assert len(initial_records) == 0
+
+        # Configure mock collector to return the multiple TimeSeries document
+        mock_collector = entsoe_data_service_with_real_db._collector
+
+        # Mock asyncio.sleep to avoid rate limiting delays during test
+        with (
+            patch("asyncio.sleep", new_callable=AsyncMock),
+            patch.object(
+                mock_collector, "get_actual_total_load", new_callable=AsyncMock
+            ) as mock_method,
+        ):
+            mock_method.return_value = multi_ts_document
+            result = await entsoe_data_service_with_real_db.collect_gaps_for_endpoint(
+                AreaCode.DE_LU, EndpointNames.ACTUAL_LOAD
+            )
+
+        # Verify collection was successful
+        assert result.success is True
+        assert result.stored_count > 0
+        assert result.area == AreaCode.DE_LU
+        assert result.data_type == EnergyDataType.ACTUAL
+
+        # Verify ALL data points from BOTH TimeSeries were stored
+        stored_records = await energy_repository.get_all()
+        expected_points = 1 + 11  # 1 from TS1 + 11 from TS2 = 12 points total
+        assert len(stored_records) == expected_points, (
+            f"Expected {expected_points} points from multiple TimeSeries, "
+            f"got {len(stored_records)}. Data loss detected!"
+        )
+
+        # Verify both TimeSeries are represented
+        time_series_mrids = {record.time_series_mrid for record in stored_records}
+        assert time_series_mrids == {"1", "2"}, (
+            f"Expected both TimeSeries mRIDs ['1', '2'], got {time_series_mrids}"
+        )
+
+        # Verify point distribution matches TimeSeries structure
+        ts1_records = [r for r in stored_records if r.time_series_mrid == "1"]
+        ts2_records = [r for r in stored_records if r.time_series_mrid == "2"]
+
+        assert len(ts1_records) == 1, (
+            f"TimeSeries 1 should have 1 point, got {len(ts1_records)}"
+        )
+        assert len(ts2_records) == 11, (
+            f"TimeSeries 2 should have 11 points, got {len(ts2_records)}"
+        )
+
+        # Verify document metadata consistency
+        assert all(
+            r.document_mrid.startswith("multi-ts-document") for r in stored_records
+        )
+        assert all(r.area_code == "DE-LU" for r in stored_records)
+        assert all(r.data_type == EnergyDataType.ACTUAL for r in stored_records)
+        assert all(r.data_source == "entsoe" for r in stored_records)
+
+        # Verify different resolutions are preserved
+        ts1_resolutions = {r.resolution for r in ts1_records}
+        ts2_resolutions = {r.resolution for r in ts2_records}
+        assert ts1_resolutions == {"PT60M"}
+        assert ts2_resolutions == {"PT15M"}
+
+        # Test that timestamps are properly calculated for both TimeSeries
+        ts1_timestamps = [r.timestamp for r in ts1_records]
+        ts2_timestamps = [r.timestamp for r in ts2_records]
+
+        # Verify each TimeSeries has timestamps
+        assert len(ts1_timestamps) == 1, "TS1 should have 1 timestamp"
+        assert len(ts2_timestamps) == 11, "TS2 should have 11 timestamps"
+
+        # Verify timestamps are unique within each TimeSeries (no duplicates)
+        assert len(set(ts1_timestamps)) == len(ts1_timestamps), (
+            "TS1 timestamps should be unique"
+        )
+        assert len(set(ts2_timestamps)) == len(ts2_timestamps), (
+            "TS2 timestamps should be unique"
+        )
+
+        # Verify quantities are preserved from both TimeSeries
+        ts1_quantities = {r.quantity for r in ts1_records}
+        ts2_quantities = {r.quantity for r in ts2_records}
+
+        assert ts1_quantities == {Decimal("1500.0")}, (
+            "TS1 should have the expected quantity"
+        )
+
+        # TS2 should have range from 1650.0 to 2150.0 (1600 + 50*i for i in 1-11)
+        expected_ts2_quantities = {
+            Decimal(str(1600.0 + (i * 50))) for i in range(1, 12)
+        }
+        assert ts2_quantities == expected_ts2_quantities, (
+            f"TS2 quantities mismatch: expected {expected_ts2_quantities}, got {ts2_quantities}"
+        )

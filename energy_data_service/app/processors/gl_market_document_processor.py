@@ -21,12 +21,11 @@ Supported Mappings:
 - A33 (Year Ahead) + A70 (Load Forecast Margin) → FORECAST_MARGIN
 """
 
+import logging
 import re
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, ClassVar, NamedTuple
-
-from dateutil.relativedelta import relativedelta  # type: ignore[import-untyped]
 
 from app.exceptions.processor_exceptions import (
     DocumentParsingError,
@@ -36,9 +35,14 @@ from app.exceptions.processor_exceptions import (
 )
 from app.models.load_data import EnergyDataPoint, EnergyDataType
 from app.processors.base_processor import BaseProcessor
+from dateutil.relativedelta import relativedelta  # type: ignore[import-untyped]
+
 from entsoe_client.model.common.document_type import DocumentType
 from entsoe_client.model.common.process_type import ProcessType
 from entsoe_client.model.load.gl_market_document import GlMarketDocument
+from entsoe_client.model.load.load_time_series import LoadTimeSeries
+
+log = logging.getLogger(__name__)
 
 
 class DurationComponents(NamedTuple):
@@ -137,52 +141,25 @@ class GlMarketDocumentProcessor(BaseProcessor[GlMarketDocument, EnergyDataPoint]
             MappingError: When ProcessType mapping fails
             TimestampCalculationError: When timestamp calculation fails
         """
+        points: list[EnergyDataPoint] = []
+
         try:
             # Map ProcessType + DocumentType combination to EnergyDataType
             data_type = self._map_document_to_energy_data_type(
                 document.processType, document.type
             )
 
-            # Extract area code from domain MRID using AreaCode's built-in method
-            area_code = self._extract_area_code(
-                document.timeSeries.outBiddingZoneDomainMRID
+            log.info(
+                "Processing document %s with %d TimeSeries",
+                document.mRID,
+                len(document.timeSeries),
             )
 
-            # Process periods and points
-            points: list[EnergyDataPoint] = []
-            period = document.timeSeries.period
-
-            for point in period.points:
-                if point.position is None or point.quantity is None:
-                    continue
-
-                # Calculate timestamp for this point
-                timestamp = self._calculate_point_timestamp(
-                    period_start=period.timeInterval.start,
-                    resolution=period.resolution,
-                    position=point.position,
+            for time_series in document.timeSeries:
+                series_points = await self._process_time_series(
+                    data_type=data_type, document=document, time_series=time_series
                 )
-
-                energy_point = EnergyDataPoint(
-                    timestamp=timestamp,
-                    area_code=area_code,
-                    data_type=data_type,
-                    business_type=document.timeSeries.businessType.code,
-                    quantity=Decimal(str(point.quantity)),
-                    unit=document.timeSeries.quantityMeasureUnitName,
-                    data_source="entsoe",
-                    document_mrid=document.mRID,
-                    revision_number=document.revisionNumber,
-                    document_created_at=document.createdDateTime,
-                    time_series_mrid=document.timeSeries.mRID,
-                    resolution=period.resolution,
-                    curve_type=document.timeSeries.curveType.code,
-                    object_aggregation=document.timeSeries.objectAggregation.code,
-                    position=point.position,
-                    period_start=period.timeInterval.start,
-                    period_end=period.timeInterval.end,
-                )
-                points.append(energy_point)
+                points.extend(series_points)
 
         except Exception as e:
             if isinstance(e, MappingError | TimestampCalculationError):
@@ -196,6 +173,78 @@ class GlMarketDocumentProcessor(BaseProcessor[GlMarketDocument, EnergyDataPoint]
             ) from e
         else:
             return points
+
+    async def _process_time_series(
+        self,
+        data_type: EnergyDataType,
+        document: GlMarketDocument,
+        time_series: LoadTimeSeries,
+    ) -> list[EnergyDataPoint]:
+        """
+        Process a single TimeSeries within a GL_MarketDocument.
+
+        Args:
+            document: Parent GL_MarketDocument
+            time_series: Individual TimeSeries to process
+            data_type: Mapped EnergyDataType for this document
+
+        Returns:
+            List of EnergyDataPoint models from this TimeSeries
+        """
+        area_code = self._extract_area_code(time_series.outBiddingZoneDomainMRID)
+
+        points: list[EnergyDataPoint] = []
+        period = time_series.period
+
+        log.debug(
+            "Processing TimeSeries %s: period from %s to %s with resolution %s",
+            time_series.mRID,
+            period.timeInterval.start,
+            period.timeInterval.end,
+            period.resolution,
+        )
+
+        for point in period.points:
+            if point.position is None or point.quantity is None:
+                continue
+
+            # Calculate timestamp for this point
+            timestamp = self._calculate_point_timestamp(
+                period_start=period.timeInterval.start,
+                resolution=period.resolution,
+                position=point.position,
+            )
+
+            energy_point = EnergyDataPoint(
+                timestamp=timestamp,
+                area_code=area_code,
+                data_type=data_type,
+                business_type=time_series.businessType.code,
+                quantity=Decimal(str(point.quantity)),
+                unit=time_series.quantityMeasureUnitName,
+                data_source="entsoe",
+                document_mrid=document.mRID,
+                revision_number=document.revisionNumber,
+                document_created_at=document.createdDateTime,
+                time_series_mrid=time_series.mRID,
+                resolution=period.resolution,
+                curve_type=time_series.curveType.code,
+                object_aggregation=time_series.objectAggregation.code,
+                position=point.position,
+                period_start=period.timeInterval.start,
+                period_end=period.timeInterval.end,
+            )
+            points.append(energy_point)
+
+        log.debug(
+            "Processed TimeSeries %s: %d points from %s to %s",
+            time_series.mRID,
+            len(points),
+            period.timeInterval.start,
+            period.timeInterval.end,
+        )
+
+        return points
 
     def _map_document_to_energy_data_type(
         self, process_type: ProcessType, document_type: DocumentType
@@ -245,11 +294,10 @@ class GlMarketDocumentProcessor(BaseProcessor[GlMarketDocument, EnergyDataPoint]
             TransformationError: When area code extraction fails
         """
         try:
-            country_code = domain_mrid.area_code.get_country_code()
-
-            if country_code is not None:
+            country_code = domain_mrid.area_code.area_code
+            if country_code:
                 return str(country_code)
-
+            # Fallback to description parsing if area_code is not available
             area_code_desc = str(domain_mrid.area_code.description).strip()
             if area_code_desc:
                 area_match = re.search(r"\(([A-Z]{2})\)", area_code_desc)
@@ -268,7 +316,7 @@ class GlMarketDocumentProcessor(BaseProcessor[GlMarketDocument, EnergyDataPoint]
                 target_type="str",
             ) from e
         else:
-            return str(domain_mrid.area_code.code)
+            return str(domain_mrid.area_code.area_code)
 
     def _calculate_point_timestamp(
         self,

@@ -83,7 +83,7 @@ class TestProcessorIntegration:
             receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
             createdDateTime=datetime(2023, 6, 15, 6, 30, tzinfo=UTC),
             timePeriodTimeInterval=time_interval,
-            timeSeries=time_series,
+            timeSeries=[time_series],
         )
 
     @pytest.fixture
@@ -136,7 +136,7 @@ class TestProcessorIntegration:
             receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
             createdDateTime=datetime(2023, 6, 14, 12, 0, tzinfo=UTC),
             timePeriodTimeInterval=time_interval,
-            timeSeries=time_series,
+            timeSeries=[time_series],
         )
 
     async def test_realistic_german_load_processing(
@@ -301,7 +301,7 @@ class TestProcessorIntegration:
                 receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
                 createdDateTime=datetime(2023, 6, 15, 12, 0, tzinfo=UTC),
                 timePeriodTimeInterval=time_interval,
-                timeSeries=time_series,
+                timeSeries=[time_series],
             )
             documents.append(document)
 
@@ -373,7 +373,7 @@ class TestProcessorIntegration:
             receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
             createdDateTime=datetime(2023, 12, 31, 23, 59, 59, tzinfo=UTC),
             timePeriodTimeInterval=time_interval,
-            timeSeries=time_series,
+            timeSeries=[time_series],
         )
 
         result = await processor.process([document])
@@ -402,3 +402,122 @@ class TestProcessorIntegration:
         assert all(point.data_type == EnergyDataType.YEAR_AHEAD for point in result)
         assert all(point.revision_number == 999 for point in result)
         assert all(point.unit == "MWh" for point in result)
+
+    async def test_end_to_end_multiple_time_series(
+        self,
+        processor: GlMarketDocumentProcessor,
+    ) -> None:
+        """Test complete pipeline with multiple TimeSeries response (Phase 3 requirement)."""
+        # Create first TimeSeries (short period - 1 hour)
+        points_ts1 = [
+            LoadPoint(position=1, quantity=42000.0),
+        ]
+
+        time_interval_ts1 = LoadTimeInterval(
+            start=datetime(2025, 8, 2, 14, 0, tzinfo=UTC),
+            end=datetime(2025, 8, 2, 15, 0, tzinfo=UTC),
+        )
+
+        period_ts1 = LoadPeriod(
+            timeInterval=time_interval_ts1,
+            resolution="PT60M",
+            points=points_ts1,
+        )
+
+        time_series_1 = LoadTimeSeries(
+            mRID="1",
+            businessType=BusinessType.CONSUMPTION,
+            objectAggregation=ObjectAggregation.AGGREGATED,
+            outBiddingZoneDomainMRID=DomainMRID(area_code=AreaCode.GERMANY),
+            quantityMeasureUnitName="MW",
+            curveType=CurveType.SEQUENTIAL_FIXED_SIZE_BLOCK,
+            period=period_ts1,
+        )
+
+        points_ts2 = [
+            LoadPoint(position=i, quantity=41000.0 + (i * 100)) for i in range(1, 84)
+        ]
+
+        time_interval_ts2 = LoadTimeInterval(
+            start=datetime(2025, 8, 2, 14, 30, tzinfo=UTC),
+            end=datetime(2025, 8, 3, 11, 15, tzinfo=UTC),
+        )
+
+        period_ts2 = LoadPeriod(
+            timeInterval=time_interval_ts2,
+            resolution="PT15M",
+            points=points_ts2,
+        )
+
+        time_series_2 = LoadTimeSeries(
+            mRID="2",
+            businessType=BusinessType.CONSUMPTION,
+            objectAggregation=ObjectAggregation.AGGREGATED,
+            outBiddingZoneDomainMRID=DomainMRID(area_code=AreaCode.GERMANY),
+            quantityMeasureUnitName="MW",
+            curveType=CurveType.SEQUENTIAL_FIXED_SIZE_BLOCK,
+            period=period_ts2,
+        )
+
+        document = GlMarketDocument(
+            mRID="68e1b9a516a44fcc9a4f36981209696b",
+            revisionNumber=1,
+            type=DocumentType.SYSTEM_TOTAL_LOAD,
+            processType=ProcessType.REALISED,
+            senderMarketParticipantMRID=MarketParticipantMRID(
+                value="10X1001A1001A450", coding_scheme=None
+            ),
+            senderMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
+            receiverMarketParticipantMRID=MarketParticipantMRID(
+                value="10X1001A1001A450", coding_scheme=None
+            ),
+            receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
+            createdDateTime=datetime(2025, 8, 2, 15, 0, tzinfo=UTC),
+            timePeriodTimeInterval=LoadTimeInterval(
+                start=datetime(2025, 8, 2, 14, 0, tzinfo=UTC),
+                end=datetime(2025, 8, 3, 11, 15, tzinfo=UTC),
+            ),
+            timeSeries=[time_series_1, time_series_2],
+        )
+
+        result = await processor.process([document])
+
+        expected_total_points = 1 + 83
+        assert len(result) == expected_total_points, (
+            f"Expected {expected_total_points} points, got {len(result)}. "
+            "Multiple TimeSeries processing failed!"
+        )
+
+        time_series_mrids = {point.time_series_mrid for point in result}
+        assert time_series_mrids == {"1", "2"}, (
+            f"Expected TimeSeries mRIDs ['1', '2'], got {time_series_mrids}"
+        )
+
+        ts1_points = [p for p in result if p.time_series_mrid == "1"]
+        ts2_points = [p for p in result if p.time_series_mrid == "2"]
+
+        assert len(ts1_points) == 1, (
+            f"TimeSeries 1 should have 1 point, got {len(ts1_points)}"
+        )
+        assert len(ts2_points) == 83, (
+            f"TimeSeries 2 should have 83 points, got {len(ts2_points)}"
+        )
+
+        assert all(
+            p.document_mrid == "68e1b9a516a44fcc9a4f36981209696b" for p in result
+        )
+        assert all(p.area_code == "DE" for p in result)
+        assert all(p.data_type == EnergyDataType.ACTUAL for p in result)
+        assert all(p.data_source == "entsoe" for p in result)
+
+        ts1_resolution = {p.resolution for p in ts1_points}
+        ts2_resolution = {p.resolution for p in ts2_points}
+        assert ts1_resolution == {"PT60M"}
+        assert ts2_resolution == {"PT15M"}
+
+        ts1_timestamps = [p.timestamp for p in ts1_points]
+        ts2_timestamps = [p.timestamp for p in ts2_points]
+
+        assert ts1_timestamps == [datetime(2025, 8, 2, 14, 0, tzinfo=UTC)]
+        assert ts2_timestamps[0] == datetime(2025, 8, 2, 14, 30, tzinfo=UTC)
+        assert ts2_timestamps[-1] == datetime(2025, 8, 3, 11, 0, tzinfo=UTC)

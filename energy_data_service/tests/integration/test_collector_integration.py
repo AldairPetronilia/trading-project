@@ -68,20 +68,20 @@ def _validate_market_document(result: GlMarketDocument) -> None:
     assert result.timeSeries is not None
 
     # Validate time series structure
-    assert result.timeSeries.mRID is not None
-    assert result.timeSeries.businessType is not None
-    assert result.timeSeries.objectAggregation is not None
-    assert result.timeSeries.outBiddingZoneDomainMRID is not None
-    assert result.timeSeries.quantityMeasureUnitName is not None
-    assert result.timeSeries.curveType is not None
+    assert result.timeSeries[0].mRID is not None
+    assert result.timeSeries[0].businessType is not None
+    assert result.timeSeries[0].objectAggregation is not None
+    assert result.timeSeries[0].outBiddingZoneDomainMRID is not None
+    assert result.timeSeries[0].quantityMeasureUnitName is not None
+    assert result.timeSeries[0].curveType is not None
 
     # Validate period and points
-    if result.timeSeries.period:
-        assert result.timeSeries.period.timeInterval is not None
-        assert result.timeSeries.period.resolution is not None
-        if result.timeSeries.period.points:
-            assert len(result.timeSeries.period.points) > 0
-            for point in result.timeSeries.period.points:
+    if result.timeSeries[0].period:
+        assert result.timeSeries[0].period.timeInterval is not None
+        assert result.timeSeries[0].period.resolution is not None
+        if result.timeSeries[0].period.points:
+            assert len(result.timeSeries[0].period.points) > 0
+            for point in result.timeSeries[0].period.points:
                 assert point.position is not None
                 assert point.quantity is not None
                 assert point.quantity > 0
@@ -197,7 +197,7 @@ class TestEntsoeCollectorIntegration:
 
         _validate_market_document(result)
         assert result.processType.value[0] == "A33"
-        assert result.timeSeries.businessType.value[0] == "A91"
+        assert result.timeSeries[0].businessType.value[0] == "A91"
 
     @pytest.mark.asyncio
     async def test_collector_health_check_integration(
