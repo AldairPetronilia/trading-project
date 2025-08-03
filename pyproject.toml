@@ -12,6 +12,7 @@ dev = [
     "gitingest>=0.3.1",
     "mypy>=1.16.1",
     "pre-commit>=4.2.0",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.12.1",
 ]
 
