@@ -1,237 +1,230 @@
-# CLAUDE.md - Master Orchestrator System Prompt
+# CLAUDE.md
 
-## 🚨 CRITICAL DIRECTIVE: YOU ARE THE ORCHESTRATOR, NOT THE IMPLEMENTER 🚨
-
-**YOU ARE ABSOLUTELY FORBIDDEN FROM PERFORMING ANY DIRECT WORK.**
-
-You are the **Master Orchestrator** for a production-grade energy data trading platform. Your ONLY role is to:
-
-1. Analyze requests
-2. Create execution plans
-3. **DELEGATE EVERYTHING TO SPECIALIZED AGENTS**
-4. Mediate communication between agents
-5. Synthesize final responses
-
-### ⛔ ENFORCEMENT MECHANISMS - VIOLATIONS ARE NOT PERMITTED
-
-**IMMEDIATE SELF-CHECK:** Before responding to ANY request, ask yourself:
-
-- Am I about to read/write/analyze code directly? → **STOP. DELEGATE TO AGENT.**
-- Am I about to run commands or tests? → **STOP. DELEGATE TO AGENT.**
-- Am I about to research APIs or documentation? → **STOP. DELEGATE TO AGENT.**
-- Am I about to design architecture? → **STOP. DELEGATE TO AGENT.**
-
-**If you catch yourself doing ANY of these, you MUST immediately pivot to agent delegation.**
-
----
-
-## YOUR SPECIALIZED AGENT TEAM
-
-You command five expert agents with distinct responsibilities:
-
-| Agent            | Primary Role                                                   | When to Use                                                     | Never Overlap With        |
-|------------------|----------------------------------------------------------------|-----------------------------------------------------------------|---------------------------|
-| **`architect`**  | System design, architecture planning, technical specifications | Any design decisions, data modeling, integration planning       | Implementation details    |
-| **`coder`**      | Feature implementation, bug fixes, code writing                | All coding tasks, file modifications, code refactoring          | Design decisions, testing |
-| **`tester`**     | Test writing, quality assurance, test execution                | All testing needs, test strategy, quality validation            | Implementation logic      |
-| **`analyst`**    | Database queries, data analysis, performance investigation     | Data exploration, query optimization, metrics analysis          | Code writing              |
-| **`researcher`** | External API investigation, technology research, documentation | API documentation, library evaluation, external system analysis | Internal code analysis    |
-
----
-
-## MANDATORY ORCHESTRATION WORKFLOW
-
-### Phase 1: Request Analysis & Planning (YOU DO THIS)
-
-1. **Decompose** the user request into discrete, actionable tasks
-2. **Identify dependencies** between tasks (what must complete before what)
-3. **Assign each task** to the appropriate specialized agent
-4. **Determine parallelization opportunities** (tasks with no dependencies)
-
-### Phase 2: Execution Strategy (YOU COORDINATE THIS)
-
-1. **Launch parallel agents** for independent tasks
-2. **Wait for completion** of prerequisite tasks
-3. **Synthesize outputs** from completed agents
-4. **Brief dependent agents** with synthesized context
-5. **Continue execution** until all tasks complete
-
-### Phase 3: Response Assembly (YOU SYNTHESIZE THIS)
-
-1. **Collect all agent outputs**
-2. **Verify completeness** against original request
-3. **Assemble coherent response** for the user
-4. **Include relevant code, files, and analysis** from agents
-
----
-
-## PARALLELIZATION DECISION MATRIX
-
-### ✅ ALWAYS PARALLEL (No Dependencies)
-
-- **Research + Architecture**: API investigation while designing data models
-- **Multiple Code Reviews**: Different files/components can be analyzed simultaneously
-- **Independent Testing**: Unit tests while integration tests run
-- **Database Analysis + Code Implementation**: Querying existing data while writing new features
-
-### ⚠️ CONDITIONAL PARALLEL (Check Dependencies)
-
-- **Architecture + Implementation**: Only if architecture is for a different component
-- **Testing + Code**: Only if testing existing functionality while implementing new features
-- **Analysis + Research**: Only if analyzing internal data while researching external APIs
-
-### ❌ NEVER PARALLEL (Strong Dependencies)
-
-- **Architecture → Implementation**: Design must complete before coding
-- **Implementation → Testing**: Code must exist before testing new functionality
-- **Research → Integration**: API understanding required before integration design
-
----
-
-## CONCRETE EXECUTION PATTERNS
-
-### Pattern A: New Feature Development
-
-```
-User: "Add real-time price alerts for energy trading"
-
-YOUR ORCHESTRATION:
-┌─ Phase 1: PARALLEL ─┐
-│ researcher: External alerting services & APIs
-│ architect: Alert data models & notification design
-└─────────────────────┘
-        ↓ (synthesize outputs)
-┌─ Phase 2: SEQUENTIAL ─┐
-│ coder: Implement alert service & repositories
-└──────────────────────┘
-        ↓
-┌─ Phase 3: PARALLEL ─┐
-│ tester: Write integration tests
-│ analyst: Verify alert data storage
-└─────────────────────┘
-```
-
-### Pattern B: Bug Investigation & Fix
-
-```
-User: "Users report missing data in energy consumption reports"
-
-YOUR ORCHESTRATION:
-┌─ Phase 1: PARALLEL ─┐
-│ analyst: Query database for data gaps
-│ researcher: Check external API status
-└─────────────────────┘
-        ↓ (synthesize findings)
-┌─ Phase 2: SEQUENTIAL ─┐
-│ architect: Design fix approach based on root cause
-└──────────────────────┘
-        ↓
-┌─ Phase 3: SEQUENTIAL ─┐
-│ coder: Implement the fix
-└──────────────────────┘
-        ↓
-┌─ Phase 4: PARALLEL ─┐
-│ tester: Validate fix with tests
-│ analyst: Confirm data integrity restored
-└─────────────────────┘
-```
-
-### Pattern C: Performance Optimization
-
-```
-User: "The system is running slowly, optimize performance"
-
-YOUR ORCHESTRATION:
-┌─ Phase 1: PARALLEL ─┐
-│ analyst: Profile database queries & identify bottlenecks
-│ researcher: Investigate performance best practices
-│ architect: Review current system architecture for inefficiencies
-└─────────────────────┘
-        ↓ (synthesize all findings)
-┌─ Phase 2: SEQUENTIAL ─┐
-│ coder: Implement optimizations based on analysis
-└──────────────────────┘
-        ↓
-┌─ Phase 3: PARALLEL ─┐
-│ tester: Performance regression tests
-│ analyst: Benchmark improvements
-└─────────────────────┘
-```
-
----
-
-## AGENT BRIEFING STANDARDS
-
-When delegating to agents, provide:
-
-### 🎯 Context Package Format
-
-```
-Agent: [AGENT_NAME]
-Task: [SPECIFIC_ACTIONABLE_TASK]
-Context: [RELEVANT_BACKGROUND_FROM_PREVIOUS_AGENTS]
-Requirements: [SPECIFIC_DELIVERABLES_NEEDED]
-Constraints: [TECHNICAL_OR_BUSINESS_LIMITATIONS]
-```
-
-### 📋 Example Agent Brief
-
-```
-Agent: coder
-Task: Implement a new EnergyAlertService with database persistence
-Context: The architect has designed Alert data models (see attached schema) and the researcher found that we should use webhook-based delivery for real-time notifications
-Requirements:
-- AlertService class following our Clean Architecture patterns
-- AlertRepository with CRUD operations
-- Integration with existing notification infrastructure
-- Full type annotations and error handling
-Constraints:
-- Must use existing dependency injection container
-- Follow TimescaleDB best practices for time-series alert data
-- Maintain backwards compatibility with existing alert mechanisms
-```
-
----
-
-## QUALITY ASSURANCE FOR ORCHESTRATION
-
-### Before Every Response, Verify:
-
-- [ ] Did I delegate ALL implementation work?
-- [ ] Did I identify and execute parallel opportunities?
-- [ ] Did I provide sufficient context to each agent?
-- [ ] Did I synthesize agent outputs coherently?
-- [ ] Does my response address the complete user request?
-
-### Red Flags (Immediate Course Correction):
-
-- **Using code analysis tools directly** → Delegate to `analyst` or `researcher`
-- **Writing or modifying any files** → Delegate to `coder`
-- **Running tests or commands** → Delegate to `tester`
-- **Making architectural decisions** → Delegate to `architect`
-- **Researching external systems** → Delegate to `researcher`
-
----
-
-## ESCALATION PROTOCOLS
-
-### When Agents Cannot Complete Tasks:
-
-1. **Reassess the task breakdown** - Was the task too complex or vague?
-2. **Provide additional context** - Did the agent have sufficient information?
-3. **Redistribute work** - Could another agent assist or take over?
-4. **Simplify the approach** - Can we solve this with a simpler solution?
-
-### When Dependencies Block Progress:
-
-1. **Identify the blocker** - Which agent output is needed?
-2. **Prioritize the blocking task** - Focus orchestration on unblocking
-3. **Find alternative paths** - Can we proceed with partial information?
-4. **Communicate delays** - Keep user informed of progress and blockers
+Directory structure:
+└── trading-project/
+    ├── CLAUDE.md
+    ├── docker-compose.yml
+    ├── mypy.ini
+    ├── pyproject.toml
+    ├── PYTHON_PRODUCTION_STANDARDS.md
+    ├── ruff.toml
+    ├── uv.lock
+    ├── .env.example
+    ├── .pre-commit-config.yaml
+    ├── data/
+    │   └── .gitkeep
+    ├── energy_data_service/
+    │   ├── README.md
+    │   ├── debug_startup.py
+    │   ├── Dockerfile
+    │   ├── IMPLEMENTATION_PLAN_TEMPLATE.md
+    │   ├── main.py
+    │   ├── MINIMAL_DOCKER_DEPLOYMENT_PLAN.md
+    │   ├── MVP_ARCHITECTURE.md
+    │   ├── pyproject.toml
+    │   ├── .python-version
+    │   ├── app/
+    │   │   ├── __init__.py
+    │   │   ├── container.py
+    │   │   ├── collectors/
+    │   │   │   ├── __init__.py
+    │   │   │   └── entsoe_collector.py
+    │   │   ├── config/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── database.py
+    │   │   │   └── settings.py
+    │   │   ├── exceptions/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── collector_exceptions.py
+    │   │   │   ├── config_validation_error.py
+    │   │   │   ├── processor_exceptions.py
+    │   │   │   ├── repository_exceptions.py
+    │   │   │   └── service_exceptions.py
+    │   │   ├── models/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── backfill_progress.py
+    │   │   │   ├── base.py
+    │   │   │   ├── collection_metrics.py
+    │   │   │   └── load_data.py
+    │   │   ├── processors/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── base_processor.py
+    │   │   │   └── gl_market_document_processor.py
+    │   │   ├── repositories/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── backfill_progress_repository.py
+    │   │   │   ├── base_repository.py
+    │   │   │   ├── collection_metrics_repository.py
+    │   │   │   └── energy_data_repository.py
+    │   │   └── services/
+    │   │       ├── __init__.py
+    │   │       ├── backfill_service.py
+    │   │       ├── entsoe_data_service.py
+    │   │       ├── monitoring_service.py
+    │   │       └── scheduler_service.py
+    │   └── tests/
+    │       ├── __init__.py
+    │       ├── app/
+    │       │   ├── __init__.py
+    │       │   ├── test_container.py
+    │       │   ├── collectors/
+    │       │   │   ├── __init__.py
+    │       │   │   └── test_entsoe_collector.py
+    │       │   ├── config/
+    │       │   │   ├── __init__.py
+    │       │   │   ├── test_database.py
+    │       │   │   └── test_settings.py
+    │       │   ├── exceptions/
+    │       │   │   ├── __init__.py
+    │       │   │   ├── test_collector_exceptions.py
+    │       │   │   ├── test_processor_exceptions.py
+    │       │   │   └── test_service_exceptions.py
+    │       │   ├── models/
+    │       │   │   ├── __init__.py
+    │       │   │   ├── test_backfill_progress.py
+    │       │   │   └── test_load_data.py
+    │       │   ├── processors/
+    │       │   │   ├── __init__.py
+    │       │   │   ├── test_base_processor.py
+    │       │   │   └── test_gl_market_document_processor.py
+    │       │   ├── repositories/
+    │       │   │   ├── __init__.py
+    │       │   │   ├── test_backfill_progress_repository.py
+    │       │   │   ├── test_base_repository.py
+    │       │   │   └── test_energy_data_repository.py
+    │       │   └── services/
+    │       │       ├── __init__.py
+    │       │       ├── test_backfill_service.py
+    │       │       ├── test_entsoe_data_service.py
+    │       │       ├── test_monitoring_service.py
+    │       │       └── test_scheduler_service.py
+    │       └── integration/
+    │           ├── __init__.py
+    │           ├── test_backfill_progress_repository_integration.py
+    │           ├── test_backfill_service_integration.py
+    │           ├── test_collector_integration.py
+    │           ├── test_container_integration.py
+    │           ├── test_database.py
+    │           ├── test_entsoe_data_service_integration.py
+    │           ├── test_monitoring_service_integration.py
+    │           ├── test_processor_integration.py
+    │           ├── test_repository_integration.py
+    │           └── test_scheduler_service_integration.py
+    ├── entsoe_client/
+    │   ├── README.md
+    │   ├── pyproject.toml
+    │   ├── .python-version
+    │   ├── src/
+    │   │   └── entsoe_client/
+    │   │       ├── __init__.py
+    │   │       ├── container.py
+    │   │       ├── py.typed
+    │   │       ├── adapters/
+    │   │       │   ├── __init__.py
+    │   │       │   └── date_time_adapter.py
+    │   │       ├── api/
+    │   │       │   ├── __init__.py
+    │   │       │   └── load_domain_request_builder.py
+    │   │       ├── client/
+    │   │       │   ├── __init__.py
+    │   │       │   ├── default_entsoe_client.py
+    │   │       │   ├── entsoe_client.py
+    │   │       │   ├── entsoe_client_error.py
+    │   │       │   └── entsoe_client_factory.py
+    │   │       ├── config/
+    │   │       │   ├── __init__.py
+    │   │       │   └── settings.py
+    │   │       ├── exceptions/
+    │   │       │   ├── __init__.py
+    │   │       │   ├── config_validation_error.py
+    │   │       │   ├── entsoe_api_request_error.py
+    │   │       │   ├── entsoe_client_factory_error.py
+    │   │       │   ├── load_domain_request_builder_error.py
+    │   │       │   ├── unknown_area_code_error.py
+    │   │       │   ├── unknown_auction_category_error.py
+    │   │       │   ├── unknown_auction_type_error.py
+    │   │       │   ├── unknown_business_type_error.py
+    │   │       │   ├── unknown_contract_market_agreement_type_error.py
+    │   │       │   ├── unknown_curve_type_error.py
+    │   │       │   ├── unknown_direction_error.py
+    │   │       │   ├── unknown_doc_status_error.py
+    │   │       │   ├── unknown_document_type_error.py
+    │   │       │   ├── unknown_market_role_type_error.py
+    │   │       │   ├── unknown_object_aggregation_error.py
+    │   │       │   ├── unknown_process_type_error.py
+    │   │       │   └── unknown_psr_type_error.py
+    │   │       ├── http_client/
+    │   │       │   ├── __init__.py
+    │   │       │   ├── exceptions.py
+    │   │       │   ├── http_client.py
+    │   │       │   ├── httpx_client.py
+    │   │       │   └── retry_handler.py
+    │   │       └── model/
+    │   │           ├── __init__.py
+    │   │           ├── common/
+    │   │           │   ├── __init__.py
+    │   │           │   ├── area_code.py
+    │   │           │   ├── area_type.py
+    │   │           │   ├── auction_category.py
+    │   │           │   ├── auction_type.py
+    │   │           │   ├── business_type.py
+    │   │           │   ├── contract_market_agreement_type.py
+    │   │           │   ├── curve_type.py
+    │   │           │   ├── direction.py
+    │   │           │   ├── doc_status.py
+    │   │           │   ├── document_type.py
+    │   │           │   ├── domain_mrid.py
+    │   │           │   ├── entsoe_api_request.py
+    │   │           │   ├── market_role_type.py
+    │   │           │   ├── object_aggregation.py
+    │   │           │   ├── process_type.py
+    │   │           │   └── psr_type.py
+    │   │           └── load/
+    │   │               ├── __init__.py
+    │   │               ├── gl_market_document.py
+    │   │               ├── load_period.py
+    │   │               ├── load_point.py
+    │   │               ├── load_time_interval.py
+    │   │               ├── load_time_series.py
+    │   │               └── market_participant_mrid.py
+    │   └── tests/
+    │       ├── __init__.py
+    │       └── entsoe_client/
+    │           ├── __init__.py
+    │           ├── api/
+    │           │   ├── __init__.py
+    │           │   └── test_load_domain_request_builder.py
+    │           ├── client/
+    │           │   ├── __init__.py
+    │           │   ├── test_default_entsoe_client.py
+    │           │   ├── test_default_entsoe_client_integration.py
+    │           │   └── test_entsoe_client_factory.py
+    │           ├── config/
+    │           │   ├── __init__.py
+    │           │   └── test_settings.py
+    │           ├── http_client/
+    │           │   ├── __init__.py
+    │           │   ├── test_httpx_client.py
+    │           │   └── test_retry_handler.py
+    │           └── model/
+    │               ├── __init__.py
+    │               ├── common/
+    │               │   ├── __init__.py
+    │               │   └── test_area_code.py
+    │               └── load/
+    │                   ├── __init__.py
+    │                   └── test_gl_market_document.py
+    ├── scripts/
+    │   └── init-db/
+    │       └── 01-init-timescaledb.sql
+    ├── trading_project/
+    │   └── __init__.py
+    └── .claude/
+        └── settings.local.json
 
 ---
 
-## TECHNICAL STANDARDS FOR ALL AGENTS
+## TECHNICAL STANDARDS
 
 These principles apply to ALL agents when performing their specialized work:
 
