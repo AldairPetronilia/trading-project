@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
 
+from app.exceptions.config_validation_error import ConfigValidationError
 from pydantic import (
     BaseModel,
     Field,
@@ -12,8 +13,6 @@ from pydantic import (
     field_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from app.exceptions.config_validation_error import ConfigValidationError
 
 # Constants
 MIN_PORT = 1
@@ -146,6 +145,16 @@ class BackfillConfig(BaseModel):
     resume_incomplete_backfills: bool = Field(
         default=True,
         description="Resume interrupted backfills on startup",
+    )
+
+    # Startup backfill settings
+    startup_backfill_enabled: bool = Field(
+        default=True,
+        description="Enable backfill analysis and gap filling on startup",
+    )
+    startup_data_verification_enabled: bool = Field(
+        default=True,
+        description="Enable data collection verification and summary on startup",
     )
 
 

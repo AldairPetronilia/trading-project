@@ -27,9 +27,26 @@ services:
       retries: 5
 
   energy-data-service:
-    build: energy_data_service
+    build:
+      context: .
+      dockerfile: energy_data_service/Dockerfile
+    container_name: trading_project_energy_service
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      - DATABASE__HOST=timescaledb
+      - DATABASE__PORT=5432
+      - DATABASE__USER=${DB_USER}
+      - DATABASE__PASSWORD=${DB_PASSWORD}
+      - DATABASE__NAME=${DB_NAME}
+      - ENTSOE_CLIENT__API_TOKEN=${ENTSOE_API_TOKEN}
+      - SCHEDULER__USE_PERSISTENT_JOB_STORE=false
     volumes:
       - "./logs:/app/logs"
+    networks:
+      - trading_project_network
+    restart: unless-stopped
 
 networks:
   trading_project_network:
