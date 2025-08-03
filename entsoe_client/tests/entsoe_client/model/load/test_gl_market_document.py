@@ -92,8 +92,10 @@ def test_gl_market_document_full_xml_parsing() -> None:
     assert document.timePeriodTimeInterval.end == expected_end
 
     # Verify TimeSeries element
-    assert isinstance(document.timeSeries, LoadTimeSeries)
-    assert document.timeSeries.mRID == "1"
+    assert isinstance(document.timeSeries, list)
+    assert len(document.timeSeries) == 1
+    assert isinstance(document.timeSeries[0], LoadTimeSeries)
+    assert document.timeSeries[0].mRID == "1"
     # Note: businessType, objectAggregation, curveType will be tested based on
     # their enum implementations when those are available
 
@@ -153,7 +155,7 @@ def test_gl_market_document_xml_serialization() -> None:
         receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
         createdDateTime=datetime(2016, 2, 26, 7, 24, 53, tzinfo=UTC),
         timePeriodTimeInterval=time_interval,
-        timeSeries=time_series,
+        timeSeries=[time_series],
     )
 
     # Serialize to XML
@@ -286,5 +288,138 @@ def test_gl_market_document_round_trip() -> None:
         reparsed_document.timePeriodTimeInterval.end
         == document.timePeriodTimeInterval.end
     )
-    assert reparsed_document.timeSeries.mRID == document.timeSeries.mRID
-    assert reparsed_document.timeSeries.businessType == document.timeSeries.businessType
+    assert reparsed_document.timeSeries[0].mRID == document.timeSeries[0].mRID
+    assert (
+        reparsed_document.timeSeries[0].businessType
+        == document.timeSeries[0].businessType
+    )
+
+
+def test_multiple_time_series_parsing() -> None:
+    """Test parsing GL_MarketDocument with multiple TimeSeries."""
+
+    xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
+    <mRID>test-doc</mRID>
+    <revisionNumber>1</revisionNumber>
+    <type>A65</type>
+    <process.processType>A16</process.processType>
+    <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
+    <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
+    <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
+    <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
+    <createdDateTime>2016-02-26T07:24:53Z</createdDateTime>
+    <time_Period.timeInterval>
+        <start>2015-12-31T23:00Z</start>
+        <end>2016-12-31T23:00Z</end>
+    </time_Period.timeInterval>
+    <TimeSeries>
+        <mRID>1</mRID>
+        <businessType>A04</businessType>
+        <objectAggregation>A01</objectAggregation>
+        <outBiddingZone_Domain.mRID codingScheme="A01">10YCZ-CEPS-----N</outBiddingZone_Domain.mRID>
+        <quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>
+        <curveType>A01</curveType>
+        <Period>
+            <timeInterval>
+                <start>2015-12-31T23:00Z</start>
+                <end>2016-01-01T00:00Z</end>
+            </timeInterval>
+            <resolution>PT60M</resolution>
+            <Point>
+                <position>1</position>
+                <quantity>6288</quantity>
+            </Point>
+        </Period>
+    </TimeSeries>
+    <TimeSeries>
+        <mRID>2</mRID>
+        <businessType>A04</businessType>
+        <objectAggregation>A01</objectAggregation>
+        <outBiddingZone_Domain.mRID codingScheme="A01">10YCZ-CEPS-----N</outBiddingZone_Domain.mRID>
+        <quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>
+        <curveType>A01</curveType>
+        <Period>
+            <timeInterval>
+                <start>2016-01-01T00:00Z</start>
+                <end>2016-01-01T01:00Z</end>
+            </timeInterval>
+            <resolution>PT60M</resolution>
+            <Point>
+                <position>1</position>
+                <quantity>7500</quantity>
+            </Point>
+        </Period>
+    </TimeSeries>
+</GL_MarketDocument>"""
+
+    document = GlMarketDocument.from_xml(xml_content)
+
+    # Verify document has multiple TimeSeries
+    assert len(document.timeSeries) == 2
+    assert document.timeSeries[0].mRID == "1"
+    assert document.timeSeries[1].mRID == "2"
+
+    # Verify first TimeSeries
+    first_ts = document.timeSeries[0]
+    assert first_ts.businessType == BusinessType.CONSUMPTION
+    assert first_ts.quantityMeasureUnitName == "MAW"
+    assert len(first_ts.period.points) == 1
+    assert first_ts.period.points[0].quantity == 6288.0
+
+    # Verify second TimeSeries
+    second_ts = document.timeSeries[1]
+    assert second_ts.businessType == BusinessType.CONSUMPTION
+    assert second_ts.quantityMeasureUnitName == "MAW"
+    assert len(second_ts.period.points) == 1
+    assert second_ts.period.points[0].quantity == 7500.0
+
+
+def test_single_time_series_backward_compatibility() -> None:
+    """Ensure single TimeSeries still works (backward compatibility)."""
+
+    # This test uses the same XML as the original full parsing test
+    # to ensure backward compatibility
+    xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
+    <mRID>5693afe33ce749e4b0cea17f1f64f211</mRID>
+    <revisionNumber>1</revisionNumber>
+    <type>A65</type>
+    <process.processType>A16</process.processType>
+    <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
+    <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
+    <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
+    <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
+    <createdDateTime>2016-02-26T07:24:53Z</createdDateTime>
+    <time_Period.timeInterval>
+        <start>2015-12-31T23:00Z</start>
+        <end>2016-12-31T23:00Z</end>
+    </time_Period.timeInterval>
+    <TimeSeries>
+        <mRID>1</mRID>
+        <businessType>A04</businessType>
+        <objectAggregation>A01</objectAggregation>
+        <outBiddingZone_Domain.mRID codingScheme="A01">10YCZ-CEPS-----N</outBiddingZone_Domain.mRID>
+        <quantity_Measure_Unit.name>MAW</quantity_Measure_Unit.name>
+        <curveType>A01</curveType>
+        <Period>
+            <timeInterval>
+                <start>2015-12-31T23:00Z</start>
+                <end>2016-12-31T23:00Z</end>
+            </timeInterval>
+            <resolution>PT60M</resolution>
+            <Point>
+                <position>1</position>
+                <quantity>6288</quantity>
+            </Point>
+        </Period>
+    </TimeSeries>
+</GL_MarketDocument>"""
+
+    document = GlMarketDocument.from_xml(xml_content)
+
+    # Verify that single TimeSeries is parsed as a list with one element
+    assert isinstance(document.timeSeries, list)
+    assert len(document.timeSeries) == 1
+    assert document.timeSeries[0].mRID == "1"
+    assert document.timeSeries[0].businessType == BusinessType.CONSUMPTION

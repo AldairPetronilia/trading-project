@@ -237,7 +237,7 @@ def create_historical_gl_market_document(
         receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
         createdDateTime=base_time,
         timePeriodTimeInterval=time_interval,
-        timeSeries=time_series,
+        timeSeries=[time_series],
     )
 
 

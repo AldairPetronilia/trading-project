@@ -1,5 +1,6 @@
 """Tests for GL_MarketDocument processor transformation logic."""
 
+from copy import deepcopy
 from datetime import UTC, datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock
@@ -88,7 +89,7 @@ class TestGlMarketDocumentProcessor:
             receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
             createdDateTime=datetime(2023, 1, 1, 12, 0, tzinfo=UTC),
             timePeriodTimeInterval=time_interval,
-            timeSeries=time_series,
+            timeSeries=[time_series],
         )
 
     async def test_process_single_document_success(
@@ -150,7 +151,7 @@ class TestGlMarketDocumentProcessor:
     ) -> None:
         """Test validation error for invalid input type."""
         with pytest.raises(DataValidationError) as exc_info:
-            await processor.process("not_a_list")  # type: ignore[arg-type]
+            await processor.process("not_a_list")
 
         assert "Input data must be a list" in str(exc_info.value)
         assert exc_info.value.field == "raw_data"
@@ -420,7 +421,7 @@ class TestGlMarketDocumentProcessor:
     ) -> None:
         """Test handling of points with None values."""
         # Add points with None values
-        sample_document.timeSeries.period.points.extend(
+        sample_document.timeSeries[0].period.points.extend(
             [
                 LoadPoint(position=None, quantity=100.0),  # None position
                 LoadPoint(position=5, quantity=None),  # None quantity
@@ -501,7 +502,7 @@ class TestGlMarketDocumentProcessor:
             receiverMarketParticipantMarketRoleType=MarketRoleType.MARKET_OPERATOR,
             createdDateTime=datetime(2023, 1, 1, 12, 0, tzinfo=UTC),
             timePeriodTimeInterval=time_interval,
-            timeSeries=time_series,
+            timeSeries=[time_series],
         )
 
         result = await processor.process([document])
@@ -566,3 +567,45 @@ class TestGlMarketDocumentProcessor:
         # Should add 2 * (1 day + 2 hours + 30 minutes) = 2 days, 5 hours
         expected = datetime(2023, 1, 3, 5, 0, tzinfo=UTC)
         assert result == expected
+
+    async def test_process_multiple_time_series(
+        self,
+        processor: GlMarketDocumentProcessor,
+        sample_document: GlMarketDocument,
+    ) -> None:
+        """
+        The processor must return points for every TimeSeries in the document.
+        """
+
+        ts_clone = deepcopy(sample_document.timeSeries[0])
+        ts_clone.mRID = "TS-CLONE"
+        sample_document.timeSeries.append(ts_clone)
+
+        result = await processor.process([sample_document])
+
+        # Each original point appears twice now (same positions in clone)
+        assert len(result) == 8
+        assert {p.time_series_mrid for p in result} == {"TS123456789", "TS-CLONE"}
+
+    async def test_process_overlapping_time_series(
+        self,
+        processor: GlMarketDocumentProcessor,
+        sample_document: GlMarketDocument,
+    ) -> None:
+        """
+        Overlapping timestamps in different TimeSeries must be preserved
+        (duplicates will be de-duped at the DB layer in Phase-3).
+        """
+        from copy import deepcopy
+        from datetime import timedelta
+
+        ts_overlap = deepcopy(sample_document.timeSeries[0])
+        ts_overlap.mRID = "TS-OVLP"
+        # shift the period start by 15 min so half the points overlap
+        ts_overlap.period.timeInterval.start += timedelta(minutes=15)
+        sample_document.timeSeries.append(ts_overlap)
+
+        result = await processor.process([sample_document])
+
+        assert len(result) == 8  # 4 pts original + 4 + 4 shifted
+        assert "TS-OVLP" in {p.time_series_mrid for p in result}

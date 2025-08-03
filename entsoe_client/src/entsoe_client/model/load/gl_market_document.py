@@ -32,7 +32,7 @@ class GlMarketDocument(BaseXmlModel, tag="GL_MarketDocument", nsmap=ENTSOE_LOAD_
     )
     createdDateTime: datetime = element(tag="createdDateTime")
     timePeriodTimeInterval: LoadTimeInterval = element(tag="time_Period.timeInterval")
-    timeSeries: LoadTimeSeries
+    timeSeries: list[LoadTimeSeries]
 
     @field_serializer("type")  # type: ignore[misc]
     def encode_type(self, value: DocumentType) -> str:
