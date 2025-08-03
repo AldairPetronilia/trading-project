@@ -37,9 +37,7 @@ def mock_repository() -> AsyncMock:
     """Fixture for a mocked EnergyDataRepository."""
     mock = AsyncMock()
     # Make the mock iterable for the all() call in collect_all_gaps
-    mock.__iter__ = MagicMock(
-        return_value=iter([AreaCode.GERMANY, AreaCode.FRANCE, AreaCode.NETHERLANDS])
-    )
+    mock.__iter__ = MagicMock(return_value=iter([AreaCode.DE_LU, AreaCode.DE_AT_LU]))
     return mock
 
 
@@ -234,7 +232,7 @@ class TestEntsoEDataService:
             entsoe_data_service, "collect_gaps_for_area", new_callable=AsyncMock
         ) as mock_collect_area:
             mock_result = CollectionResult(
-                area=AreaCode.GERMANY,
+                area=AreaCode.DE_LU,
                 data_type=EnergyDataType.ACTUAL,
                 stored_count=10,
                 success=True,
@@ -242,11 +240,10 @@ class TestEntsoEDataService:
             mock_collect_area.return_value = {"actual_load": mock_result}
             results = await entsoe_data_service.collect_all_gaps()
 
-            # Default areas are DE, FR, NL
-            assert mock_collect_area.call_count == 3
-            assert "actual_load" in results["DE"]
-            assert "actual_load" in results["FR"]
-            assert "actual_load" in results["NL"]
+            # Default areas are DE_LU, DE_AT_LU (keys use hyphens from area_code property)
+            assert mock_collect_area.call_count == 2
+            assert "actual_load" in results["DE-LU"]
+            assert "actual_load" in results["DE-AT-LU"]
 
     async def test_collect_with_chunking_logic(
         self,
