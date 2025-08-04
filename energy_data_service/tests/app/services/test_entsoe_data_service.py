@@ -260,9 +260,17 @@ class TestEntsoEDataService:
         end_time = start_time + timedelta(days=10)
         endpoint_name = EndpointNames.ACTUAL_LOAD
 
-        mock_collector.get_actual_total_load.return_value = MagicMock(
-            spec=GlMarketDocument
-        )
+        # Create mock document with timeSeries attribute for logging
+        mock_document = MagicMock(spec=GlMarketDocument)
+        mock_time_series = MagicMock()
+        mock_time_series.period = MagicMock()
+        mock_time_series.period.points = [
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        ]  # Mock data points
+        mock_document.timeSeries = [mock_time_series]
+        mock_collector.get_actual_total_load.return_value = mock_document
         mock_processor.process.return_value = [MagicMock(spec=EnergyDataPoint)] * 5
         mock_repository.upsert_batch.return_value = [
             MagicMock(spec=EnergyDataPoint)
@@ -334,8 +342,17 @@ class TestEntsoEDataService:
                     "HTTP 500 Internal Server Error", cause=http_error
                 )
                 raise exc
-            # Second chunk succeeds
-            return MagicMock(spec=GlMarketDocument)
+            # Second chunk succeeds - create mock with timeSeries for logging
+            mock_document = MagicMock(spec=GlMarketDocument)
+            mock_time_series = MagicMock()
+            mock_time_series.period = MagicMock()
+            mock_time_series.period.points = [
+                MagicMock(),
+                MagicMock(),
+                MagicMock(),
+            ]  # Mock data points
+            mock_document.timeSeries = [mock_time_series]
+            return mock_document
 
         mock_collector.get_actual_total_load.side_effect = collector_side_effect
         mock_processor.process.return_value = [MagicMock(spec=EnergyDataPoint)] * 3

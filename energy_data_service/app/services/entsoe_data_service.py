@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import ClassVar
@@ -13,6 +14,7 @@ from app.exceptions.repository_exceptions import RepositoryError
 from app.models.load_data import EnergyDataPoint, EnergyDataType
 from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
 from app.repositories.energy_data_repository import EnergyDataRepository
+
 from entsoe_client.client.entsoe_client_error import EntsoEClientError
 from entsoe_client.http_client.exceptions import HttpClientError
 from entsoe_client.model.common.area_code import AreaCode
@@ -140,6 +142,7 @@ class EntsoEDataService:
         self._collector = collector
         self._processor = processor
         self._repository = repository
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     async def collect_gaps_for_area(
         self, area: AreaCode
@@ -153,6 +156,13 @@ class EntsoEDataService:
         Returns:
             Dictionary mapping endpoint names to collection results
         """
+        area_name = area.area_code or str(area.code)
+        self._logger.info(
+            "Starting gap collection for area %s across %d endpoints",
+            area_name,
+            len(self.ENDPOINT_CONFIGS),
+        )
+
         results: dict[str, CollectionResult] = {}
 
         for endpoint_name in self.ENDPOINT_CONFIGS:
@@ -163,6 +173,13 @@ class EntsoEDataService:
                 # Map EntsoE client exceptions to collector errors
                 # Extract HTTP details from the cause if it's an HttpClientError
                 if isinstance(e.cause, HttpClientError):
+                    self._logger.exception(
+                        "EntsoE HTTP client error for area %s, endpoint %s: status=%s, body=%s",
+                        area_name,
+                        endpoint_name.value,
+                        e.cause.status_code,
+                        e.cause.response_body,
+                    )
                     collector_error = map_http_error_to_collector_error(
                         status_code=e.cause.status_code or 500,
                         response_body=e.cause.response_body,
@@ -173,6 +190,11 @@ class EntsoEDataService:
                     )
                 else:
                     # Handle non-HTTP EntsoEClientErrors
+                    self._logger.exception(
+                        "EntsoE client error for area %s, endpoint %s",
+                        area_name,
+                        endpoint_name.value,
+                    )
                     collector_error = CollectorError(
                         f"EntsoE client error: {e}",
                         data_source="entsoe",
@@ -186,12 +208,27 @@ class EntsoEDataService:
                     error_message=str(collector_error),
                 )
             except (CollectorError, ProcessorError, RepositoryError) as e:
+                self._logger.exception(
+                    "Service error for area %s, endpoint %s",
+                    area_name,
+                    endpoint_name.value,
+                )
                 results[endpoint_name.value] = CollectionResult(
                     area=area,
                     data_type=self.ENDPOINT_CONFIGS[endpoint_name].data_type,
                     success=False,
                     error_message=str(e),
                 )
+
+        successful_endpoints = sum(1 for result in results.values() if result.success)
+        total_stored = sum(result.stored_count for result in results.values())
+        self._logger.info(
+            "Completed gap collection for area %s: %d/%d endpoints successful, %d total records stored",
+            area_name,
+            successful_endpoints,
+            len(results),
+            total_stored,
+        )
 
         return results
 
@@ -212,19 +249,42 @@ class EntsoEDataService:
             msg = f"Unknown endpoint: {endpoint_name}"
             raise ValueError(msg)
 
+        area_name = area.area_code or str(area.code)
         config = self.ENDPOINT_CONFIGS[endpoint_name]
+
+        self._logger.debug(
+            "Detecting gaps for area %s, endpoint %s (data_type=%s)",
+            area_name,
+            endpoint_name.value,
+            config.data_type.value,
+        )
 
         # Detect gap for this endpoint
         gap_start, gap_end = await self._detect_gap_for_endpoint(area, config)
 
         if gap_start >= gap_end:
             # No gap to fill
+            self._logger.info(
+                "No gap detected for area %s, endpoint %s - data is up to date",
+                area_name,
+                endpoint_name.value,
+            )
             result = CollectionResult(
                 area=area,
                 data_type=config.data_type,
             )
             result.set_time_range(gap_start, gap_end)
             return result
+
+        gap_duration = gap_end - gap_start
+        self._logger.info(
+            "Gap detected for area %s, endpoint %s: %s to %s (duration: %s)",
+            area_name,
+            endpoint_name.value,
+            gap_start.isoformat(),
+            gap_end.isoformat(),
+            str(gap_duration),
+        )
 
         # Collect data to fill the gap
         return await self.collect_with_chunking(area, endpoint_name, gap_start, gap_end)
@@ -241,7 +301,7 @@ class EntsoEDataService:
         results = {}
 
         for area in areas:
-            area_key = area.get_country_code() or str(area.code)
+            area_key = area.area_code or str(area.code)
             results[area_key] = await self.collect_gaps_for_area(area)
 
         return results
@@ -265,13 +325,32 @@ class EntsoEDataService:
         Returns:
             Result of the collection operation
         """
+        area_name = area.area_code or str(area.code)
         config = self.ENDPOINT_CONFIGS[endpoint_name]
         total_stored = 0
 
         # Split into chunks
         chunks = self._create_time_chunks(start_time, end_time, config.max_chunk_days)
 
-        for chunk_start, chunk_end in chunks:
+        self._logger.info(
+            "Starting chunked collection for area %s, endpoint %s: %d chunks, rate_limit=%.1fs",
+            area_name,
+            endpoint_name.value,
+            len(chunks),
+            config.rate_limit_delay,
+        )
+
+        for i, (chunk_start, chunk_end) in enumerate(chunks, 1):
+            self._logger.debug(
+                "Processing chunk %d/%d for area %s, endpoint %s: %s to %s",
+                i,
+                len(chunks),
+                area_name,
+                endpoint_name.value,
+                chunk_start.isoformat(),
+                chunk_end.isoformat(),
+            )
+
             try:
                 # Collect raw data for this chunk
                 raw_document = await self._collect_raw_data(
@@ -281,10 +360,38 @@ class EntsoEDataService:
                 if raw_document:
                     # Process into database models
                     data_points = await self._processor.process([raw_document])
+                    point_count = len(data_points)
+
+                    self._logger.debug(
+                        "Processed %d data points from chunk %d/%d for area %s, endpoint %s",
+                        point_count,
+                        i,
+                        len(chunks),
+                        area_name,
+                        endpoint_name.value,
+                    )
 
                     # Store in database with upsert
                     stored_models = await self._repository.upsert_batch(data_points)
-                    total_stored += len(stored_models)
+                    stored_count = len(stored_models)
+                    total_stored += stored_count
+
+                    self._logger.debug(
+                        "Stored %d records from chunk %d/%d for area %s, endpoint %s",
+                        stored_count,
+                        i,
+                        len(chunks),
+                        area_name,
+                        endpoint_name.value,
+                    )
+                else:
+                    self._logger.debug(
+                        "No data returned for chunk %d/%d (area %s, endpoint %s)",
+                        i,
+                        len(chunks),
+                        area_name,
+                        endpoint_name.value,
+                    )
 
                 # Rate limiting between chunks
                 await asyncio.sleep(config.rate_limit_delay)
@@ -293,6 +400,15 @@ class EntsoEDataService:
                 # Map EntsoE client exceptions to collector errors and continue
                 # Extract HTTP details from the cause if it's an HttpClientError
                 if isinstance(e.cause, HttpClientError):
+                    self._logger.exception(
+                        "EntsoE HTTP error in chunk %d/%d for area %s, endpoint %s: status=%s, body=%s",
+                        i,
+                        len(chunks),
+                        area_name,
+                        endpoint_name.value,
+                        e.cause.status_code,
+                        e.cause.response_body,
+                    )
                     map_http_error_to_collector_error(
                         status_code=e.cause.status_code or 500,
                         response_body=e.cause.response_body,
@@ -303,19 +419,39 @@ class EntsoEDataService:
                     )
                 else:
                     # Handle non-HTTP EntsoEClientErrors
+                    self._logger.exception(
+                        "EntsoE client error in chunk %d/%d for area %s, endpoint %s",
+                        i,
+                        len(chunks),
+                        area_name,
+                        endpoint_name.value,
+                    )
                     CollectorError(
                         f"EntsoE client error: {e}",
                         data_source="entsoe",
                         operation=endpoint_name.value,
                         context={"original_error": str(e)},
                     )
-                # Log error but continue with other chunks
-                # In production, would use proper logging
+                # Continue with other chunks
                 continue
             except (CollectorError, ProcessorError, RepositoryError):
-                # Log error but continue with other chunks
-                # In production, would use proper logging
+                self._logger.exception(
+                    "Service error in chunk %d/%d for area %s, endpoint %s",
+                    i,
+                    len(chunks),
+                    area_name,
+                    endpoint_name.value,
+                )
+                # Continue with other chunks
                 continue
+
+        self._logger.info(
+            "Completed chunked collection for area %s, endpoint %s: %d total records stored from %d chunks",
+            area_name,
+            endpoint_name.value,
+            total_stored,
+            len(chunks),
+        )
 
         result = CollectionResult(
             area=area,
@@ -345,7 +481,7 @@ class EntsoEDataService:
 
         # Get latest data for this area/endpoint
         latest_point = await self._repository.get_latest_for_area(
-            area.get_country_code() or str(area.code),
+            area.area_code or str(area.code),
             config.data_type,
             BusinessType.CONSUMPTION.code,
         )
@@ -371,9 +507,11 @@ class EntsoEDataService:
         Returns:
             Tuple of (gap_start, gap_end) datetimes
         """
+        area_name = area.area_code or str(area.code)
+
         # Get latest data point for this area/endpoint
         latest_point = await self._repository.get_latest_for_area(
-            area.get_country_code() or str(area.code),
+            area_name,
             config.data_type,
             BusinessType.CONSUMPTION.code,
         )
@@ -383,10 +521,27 @@ class EntsoEDataService:
             current_time = datetime.now(UTC)
             gap_start = current_time - timedelta(days=7)
             gap_end = current_time
+
+            self._logger.debug(
+                "No existing data found for area %s, data_type %s - starting from 7 days ago: %s to %s",
+                area_name,
+                config.data_type.value,
+                gap_start.isoformat(),
+                gap_end.isoformat(),
+            )
         else:
             # Start gap from next expected point after latest data
             gap_start = latest_point.timestamp + config.expected_interval
             gap_end = datetime.now(latest_point.timestamp.tzinfo)
+
+            self._logger.debug(
+                "Latest data for area %s, data_type %s found at %s - gap analysis: %s to %s",
+                area_name,
+                config.data_type.value,
+                latest_point.timestamp.isoformat(),
+                gap_start.isoformat(),
+                gap_end.isoformat(),
+            )
 
         return gap_start, gap_end
 
@@ -409,6 +564,8 @@ class EntsoEDataService:
         Returns:
             Raw GL market document or None if no data
         """
+        area_name = area.area_code or str(area.code)
+
         # Map endpoint names to collector methods
         collector_methods = {
             EndpointNames.ACTUAL_LOAD: self._collector.get_actual_total_load,
@@ -425,12 +582,46 @@ class EntsoEDataService:
 
         collector_method = collector_methods[endpoint_name]
 
+        self._logger.debug(
+            "Making ENTSO-E API request: area=%s, endpoint=%s, period=%s to %s",
+            area_name,
+            endpoint_name.value,
+            start_time.isoformat(),
+            end_time.isoformat(),
+        )
+
         # Call the appropriate collector method
-        return await collector_method(
+        result = await collector_method(
             bidding_zone=area,
             period_start=start_time,
             period_end=end_time,
         )
+
+        if result:
+            # Log summary of response data
+            time_series_count = len(result.timeSeries) if result.timeSeries else 0
+            total_points = sum(
+                len(ts.period.points) if ts.period and ts.period.points else 0
+                for ts in (result.timeSeries or [])
+            )
+
+            self._logger.debug(
+                "ENTSO-E API response received: area=%s, endpoint=%s, time_series=%d, total_points=%d",
+                area_name,
+                endpoint_name.value,
+                time_series_count,
+                total_points,
+            )
+        else:
+            self._logger.debug(
+                "ENTSO-E API returned no data: area=%s, endpoint=%s, period=%s to %s",
+                area_name,
+                endpoint_name.value,
+                start_time.isoformat(),
+                end_time.isoformat(),
+            )
+
+        return result
 
     def _create_time_chunks(
         self, start_time: datetime, end_time: datetime, max_chunk_days: int
