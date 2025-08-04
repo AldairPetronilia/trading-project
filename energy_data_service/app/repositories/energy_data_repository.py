@@ -1,14 +1,13 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import and_, delete, desc, select
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.exc import SQLAlchemyError
-
 from app.config.database import Database
 from app.exceptions.repository_exceptions import DataAccessError
 from app.models.load_data import EnergyDataPoint, EnergyDataType
 from app.repositories.base_repository import BaseRepository
+from sqlalchemy import and_, delete, desc, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 
 COMPOSITE_KEY_LENGTH = 4
 
@@ -349,6 +348,57 @@ class EnergyDataRepository(BaseRepository[EnergyDataPoint]):
                         "area_code": area_code,
                         "data_type": data_type.value,
                         "business_type": business_type,
+                    },
+                ) from e
+
+    async def get_latest_for_area_and_type(
+        self,
+        area_code: str,
+        data_type: EnergyDataType,
+    ) -> EnergyDataPoint | None:
+        """Retrieve the most recent energy data point for an area and data type combination.
+
+        This method queries only by area_code and data_type, ignoring business_type.
+        This is useful for gap detection where we want the latest data regardless
+        of the specific business type returned by the ENTSO-E API.
+
+        Args:
+            area_code: The area code to filter by
+            data_type: The energy data type to filter by
+
+        Returns:
+            The most recent energy data point if found, None otherwise
+
+        Raises:
+            DataAccessError: If the database operation fails
+        """
+        async with self.database.session_factory() as session:
+            try:
+                stmt = (
+                    select(EnergyDataPoint)
+                    .where(
+                        and_(
+                            EnergyDataPoint.area_code == area_code,
+                            EnergyDataPoint.data_type == data_type,
+                        ),
+                    )
+                    .order_by(desc(EnergyDataPoint.timestamp))
+                    .limit(1)
+                )
+
+                result = await session.execute(stmt)
+                return result.scalar_one_or_none()
+            except SQLAlchemyError as e:
+                error_msg = (
+                    "Failed to retrieve latest energy data point for area and type"
+                )
+                raise DataAccessError(
+                    error_msg,
+                    model_type="EnergyDataPoint",
+                    operation="get_latest_for_area_and_type",
+                    context={
+                        "area_code": area_code,
+                        "data_type": data_type.value,
                     },
                 ) from e
 

@@ -562,3 +562,72 @@ class TestEnergyDataRepository:
         assert exc_info.value.model_type == "EnergyDataPoint"
         assert exc_info.value.operation == "get_latest_for_area"
         assert exc_info.value.context["area_code"] == "DE_LU"
+
+    @pytest.mark.asyncio
+    async def test_get_latest_for_area_and_type_found(
+        self,
+        repository: EnergyDataRepository,
+        mock_database: Database,
+        mock_session: AsyncMock,
+        sample_energy_data_point: EnergyDataPoint,
+    ) -> None:
+        """Test getting latest data point for area and type - found."""
+        setup_session_mock(mock_database, mock_session)
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_energy_data_point
+        mock_session.execute.return_value = mock_result
+
+        result = await repository.get_latest_for_area_and_type(
+            area_code="DE_LU",
+            data_type=EnergyDataType.ACTUAL,
+        )
+
+        assert result == sample_energy_data_point
+        mock_session.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_latest_for_area_and_type_not_found(
+        self,
+        repository: EnergyDataRepository,
+        mock_database: Database,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Test getting latest data point for area and type - not found."""
+        setup_session_mock(mock_database, mock_session)
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = mock_result
+
+        result = await repository.get_latest_for_area_and_type(
+            area_code="DE_LU",
+            data_type=EnergyDataType.ACTUAL,
+        )
+
+        assert result is None
+        mock_session.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_latest_for_area_and_type_database_error(
+        self,
+        repository: EnergyDataRepository,
+        mock_database: Database,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Test getting latest data point for area and type - database error."""
+        setup_session_mock(mock_database, mock_session)
+
+        mock_session.execute.side_effect = SQLAlchemyError("Database error")
+
+        with pytest.raises(DataAccessError) as exc_info:
+            await repository.get_latest_for_area_and_type(
+                area_code="DE_LU",
+                data_type=EnergyDataType.ACTUAL,
+            )
+
+        assert "Failed to retrieve latest energy data point for area and type" in str(
+            exc_info.value
+        )
+        assert exc_info.value.context["area_code"] == "DE_LU"
+        assert exc_info.value.context["data_type"] == "actual"
