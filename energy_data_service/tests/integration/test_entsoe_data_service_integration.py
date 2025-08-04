@@ -1475,3 +1475,274 @@ class TestEntsoEDataServiceIntegration:
         assert ts2_quantities == expected_ts2_quantities, (
             f"TS2 quantities mismatch: expected {expected_ts2_quantities}, got {ts2_quantities}"
         )
+
+    async def test_gap_detection_forward_vs_backward_looking_integration(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+    ) -> None:
+        """
+        Integration test verifying that forward-looking and backward-looking endpoints
+        collect data from different time periods.
+        """
+        area = AreaCode.DE_LU
+        current_time = datetime.now(UTC)
+
+        # Test backward-looking endpoint (ACTUAL_LOAD)
+        actual_config = entsoe_data_service_with_real_db.ENDPOINT_CONFIGS[
+            EndpointNames.ACTUAL_LOAD
+        ]
+        (
+            actual_gap_start,
+            actual_gap_end,
+        ) = await entsoe_data_service_with_real_db._detect_gap_for_endpoint(
+            area, actual_config
+        )
+
+        # Test forward-looking endpoint (DAY_AHEAD_FORECAST)
+        forecast_config = entsoe_data_service_with_real_db.ENDPOINT_CONFIGS[
+            EndpointNames.DAY_AHEAD_FORECAST
+        ]
+        (
+            forecast_gap_start,
+            forecast_gap_end,
+        ) = await entsoe_data_service_with_real_db._detect_gap_for_endpoint(
+            area, forecast_config
+        )
+
+        # Verify backward-looking endpoint looks into the past
+        assert actual_config.is_forward_looking is False
+        assert actual_gap_start < current_time
+        assert actual_gap_end <= current_time + timedelta(
+            minutes=1
+        )  # Allow small time differences
+
+        # Verify forward-looking endpoint looks into the future
+        assert forecast_config.is_forward_looking is True
+        assert forecast_gap_start >= current_time - timedelta(
+            minutes=1
+        )  # Allow small time differences
+        assert forecast_gap_end > current_time
+        assert forecast_gap_end == forecast_gap_start + forecast_config.forecast_horizon
+
+        # Verify the time ranges don't overlap (different directions)
+        assert actual_gap_end <= forecast_gap_start + timedelta(
+            minutes=1
+        )  # No overlap with small tolerance
+
+    async def test_forecast_horizon_configuration_integration(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+    ) -> None:
+        """
+        Integration test verifying that different forecast endpoints use their configured horizons.
+        """
+        area = AreaCode.DE_LU
+        current_time = datetime.now(UTC)
+
+        # Test different forecast endpoints
+        forecast_endpoints = [
+            (EndpointNames.DAY_AHEAD_FORECAST, timedelta(days=2)),
+            (EndpointNames.WEEK_AHEAD_FORECAST, timedelta(weeks=2)),
+            (EndpointNames.MONTH_AHEAD_FORECAST, timedelta(days=62)),
+            (EndpointNames.YEAR_AHEAD_FORECAST, timedelta(days=730)),
+            (EndpointNames.FORECAST_MARGIN, timedelta(days=365)),
+        ]
+
+        for endpoint_name, expected_horizon in forecast_endpoints:
+            config = entsoe_data_service_with_real_db.ENDPOINT_CONFIGS[endpoint_name]
+            (
+                gap_start,
+                gap_end,
+            ) = await entsoe_data_service_with_real_db._detect_gap_for_endpoint(
+                area, config
+            )
+
+            # Verify the forecast horizon is correct
+            actual_horizon = gap_end - gap_start
+            assert actual_horizon == expected_horizon, (
+                f"Endpoint {endpoint_name} has incorrect forecast horizon: "
+                f"expected {expected_horizon}, got {actual_horizon}"
+            )
+
+            # Verify all are forward-looking
+            assert config.is_forward_looking is True
+            assert gap_end > current_time
+
+    async def test_mixed_endpoint_collection_integration(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """
+        Integration test verifying that mixed endpoint collection handles both directions correctly.
+        """
+        area = AreaCode.DE_LU
+
+        # Insert some historical actual data
+        historical_data = EnergyDataPoint(
+            timestamp=datetime.now(UTC) - timedelta(hours=2),
+            area_code=area.area_code,
+            data_type=EnergyDataType.ACTUAL,
+            quantity=Decimal("1000.5"),
+            unit="MAW",
+            business_type=BusinessType.CONSUMPTION.code,
+            document_mrid="test-historical-doc",
+            revision_number=1,
+            document_created_at=datetime.now(UTC) - timedelta(hours=2),
+            time_series_mrid="test-historical-ts",
+            resolution="PT60M",
+            curve_type="A01",
+            object_aggregation="A01",
+            position=1,
+            period_start=datetime.now(UTC) - timedelta(hours=2),
+            period_end=datetime.now(UTC) - timedelta(hours=1),
+        )
+        await energy_repository.upsert_batch([historical_data])
+
+        # Insert some forecast data
+        forecast_data = EnergyDataPoint(
+            timestamp=datetime.now(UTC) + timedelta(hours=12),
+            area_code=area.area_code,
+            data_type=EnergyDataType.DAY_AHEAD,
+            quantity=Decimal("1200.0"),
+            unit="MAW",
+            business_type=BusinessType.PRODUCTION.code,
+            document_mrid="test-forecast-doc",
+            revision_number=1,
+            document_created_at=datetime.now(UTC),
+            time_series_mrid="test-forecast-ts",
+            resolution="PT60M",
+            curve_type="A01",
+            object_aggregation="A01",
+            position=1,
+            period_start=datetime.now(UTC) + timedelta(hours=12),
+            period_end=datetime.now(UTC) + timedelta(hours=13),
+        )
+        await energy_repository.upsert_batch([forecast_data])
+
+        # Test gap detection for both types
+        actual_config = entsoe_data_service_with_real_db.ENDPOINT_CONFIGS[
+            EndpointNames.ACTUAL_LOAD
+        ]
+        (
+            actual_gap_start,
+            actual_gap_end,
+        ) = await entsoe_data_service_with_real_db._detect_gap_for_endpoint(
+            area, actual_config
+        )
+
+        forecast_config = entsoe_data_service_with_real_db.ENDPOINT_CONFIGS[
+            EndpointNames.DAY_AHEAD_FORECAST
+        ]
+        (
+            forecast_gap_start,
+            forecast_gap_end,
+        ) = await entsoe_data_service_with_real_db._detect_gap_for_endpoint(
+            area, forecast_config
+        )
+
+        # Verify actual data gap starts after the last historical data point
+        expected_actual_start = (
+            historical_data.timestamp + actual_config.expected_interval
+        )
+        assert actual_gap_start == expected_actual_start
+        assert actual_gap_end <= datetime.now(UTC) + timedelta(minutes=1)
+
+        # Verify forecast data gap starts after the last forecast data point
+        expected_forecast_start = (
+            forecast_data.timestamp + forecast_config.expected_interval
+        )
+        assert forecast_gap_start == expected_forecast_start
+        assert forecast_gap_end > datetime.now(UTC)
+
+    async def test_endpoint_config_validation_integration(
+        self, entsoe_data_service_with_real_db: EntsoEDataService
+    ) -> None:
+        """
+        Integration test verifying that all endpoint configurations are valid and consistent.
+        """
+        configs = entsoe_data_service_with_real_db.ENDPOINT_CONFIGS
+
+        # Verify exactly one backward-looking endpoint
+        backward_looking = [
+            name for name, config in configs.items() if not config.is_forward_looking
+        ]
+        assert len(backward_looking) == 1
+        assert backward_looking[0] == EndpointNames.ACTUAL_LOAD
+
+        # Verify all forecast endpoints are forward-looking
+        forward_looking = [
+            name for name, config in configs.items() if config.is_forward_looking
+        ]
+        expected_forward_looking = [
+            EndpointNames.DAY_AHEAD_FORECAST,
+            EndpointNames.WEEK_AHEAD_FORECAST,
+            EndpointNames.MONTH_AHEAD_FORECAST,
+            EndpointNames.YEAR_AHEAD_FORECAST,
+            EndpointNames.FORECAST_MARGIN,
+        ]
+        assert set(forward_looking) == set(expected_forward_looking)
+
+        # Verify all forward-looking endpoints have reasonable forecast horizons
+        for endpoint_name in forward_looking:
+            config = configs[endpoint_name]
+            assert config.forecast_horizon > timedelta(0)
+            assert config.forecast_horizon <= timedelta(
+                days=1000
+            )  # Reasonable upper bound
+
+        # Verify backward-looking endpoint has default forecast horizon (unused)
+        actual_config = configs[EndpointNames.ACTUAL_LOAD]
+        assert actual_config.forecast_horizon == timedelta(days=7)  # Default value
+
+    async def test_time_direction_consistency_integration(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+    ) -> None:
+        """
+        Integration test verifying time direction consistency across multiple collection attempts.
+        """
+        area = AreaCode.DE_LU
+        current_time = datetime.now(UTC)
+
+        # Collect gaps multiple times to ensure consistency
+        for attempt in range(3):
+            # Test backward-looking endpoint
+            actual_config = entsoe_data_service_with_real_db.ENDPOINT_CONFIGS[
+                EndpointNames.ACTUAL_LOAD
+            ]
+            (
+                actual_gap_start,
+                actual_gap_end,
+            ) = await entsoe_data_service_with_real_db._detect_gap_for_endpoint(
+                area, actual_config
+            )
+
+            # Test forward-looking endpoint
+            forecast_config = entsoe_data_service_with_real_db.ENDPOINT_CONFIGS[
+                EndpointNames.DAY_AHEAD_FORECAST
+            ]
+            (
+                forecast_gap_start,
+                forecast_gap_end,
+            ) = await entsoe_data_service_with_real_db._detect_gap_for_endpoint(
+                area, forecast_config
+            )
+
+            # Verify consistency in time directions
+            assert actual_gap_start < current_time, (
+                f"Attempt {attempt}: Actual data should look backward"
+            )
+            assert actual_gap_end <= current_time + timedelta(minutes=1), (
+                f"Attempt {attempt}: Actual data should end around now"
+            )
+
+            assert forecast_gap_start >= current_time - timedelta(minutes=1), (
+                f"Attempt {attempt}: Forecast data should start around now"
+            )
+            assert forecast_gap_end > current_time, (
+                f"Attempt {attempt}: Forecast data should look forward"
+            )
+
+            # Small delay between attempts
+            await asyncio.sleep(0.1)

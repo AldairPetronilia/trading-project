@@ -49,6 +49,325 @@ def entsoe_data_service(
     return EntsoEDataService(mock_collector, mock_processor, mock_repository)
 
 
+class TestEndpointConfig:
+    """Test cases for EndpointConfig class."""
+
+    def test_backward_looking_config_creation(self) -> None:
+        """Test creating a backward-looking endpoint configuration."""
+        config = EndpointConfig(
+            data_type=EnergyDataType.ACTUAL,
+            expected_interval=timedelta(minutes=5),
+            max_chunk_days=3,
+            rate_limit_delay=1.0,
+            is_forward_looking=False,
+        )
+
+        assert config.data_type == EnergyDataType.ACTUAL
+        assert config.expected_interval == timedelta(minutes=5)
+        assert config.max_chunk_days == 3
+        assert config.rate_limit_delay == 1.0
+        assert config.is_forward_looking is False
+        assert config.forecast_horizon == timedelta(days=7)  # Default value
+
+    def test_forward_looking_config_creation(self) -> None:
+        """Test creating a forward-looking endpoint configuration."""
+        forecast_horizon = timedelta(days=2)
+        config = EndpointConfig(
+            data_type=EnergyDataType.DAY_AHEAD,
+            expected_interval=timedelta(minutes=15),
+            max_chunk_days=7,
+            rate_limit_delay=1.0,
+            is_forward_looking=True,
+            forecast_horizon=forecast_horizon,
+        )
+
+        assert config.data_type == EnergyDataType.DAY_AHEAD
+        assert config.expected_interval == timedelta(minutes=15)
+        assert config.max_chunk_days == 7
+        assert config.rate_limit_delay == 1.0
+        assert config.is_forward_looking is True
+        assert config.forecast_horizon == forecast_horizon
+
+    def test_forward_looking_config_without_horizon_raises_error(self) -> None:
+        """Test that forward-looking config without forecast_horizon raises ValueError."""
+        with pytest.raises(
+            ValueError,
+            match="forecast_horizon is required for forward-looking endpoint",
+        ):
+            EndpointConfig(
+                data_type=EnergyDataType.DAY_AHEAD,
+                expected_interval=timedelta(minutes=15),
+                max_chunk_days=7,
+                rate_limit_delay=1.0,
+                is_forward_looking=True,
+                # Missing forecast_horizon
+            )
+
+    def test_forward_looking_config_with_none_horizon_raises_error(self) -> None:
+        """Test that forward-looking config with None forecast_horizon raises ValueError."""
+        with pytest.raises(
+            ValueError,
+            match="forecast_horizon is required for forward-looking endpoint",
+        ):
+            EndpointConfig(
+                data_type=EnergyDataType.DAY_AHEAD,
+                expected_interval=timedelta(minutes=15),
+                max_chunk_days=7,
+                rate_limit_delay=1.0,
+                is_forward_looking=True,
+                forecast_horizon=None,
+            )
+
+
+class TestEntsoEDataServiceConfiguration:
+    """Test cases for EntsoEDataService endpoint configuration."""
+
+    def test_endpoint_configs_structure(
+        self, entsoe_data_service: EntsoEDataService
+    ) -> None:
+        """Test that all endpoint configurations are properly structured."""
+        configs = entsoe_data_service.ENDPOINT_CONFIGS
+
+        # Verify all expected endpoints are present
+        expected_endpoints = {
+            EndpointNames.ACTUAL_LOAD,
+            EndpointNames.DAY_AHEAD_FORECAST,
+            EndpointNames.WEEK_AHEAD_FORECAST,
+            EndpointNames.MONTH_AHEAD_FORECAST,
+            EndpointNames.YEAR_AHEAD_FORECAST,
+            EndpointNames.FORECAST_MARGIN,
+        }
+        assert set(configs.keys()) == expected_endpoints
+
+        # Verify each configuration has the required attributes
+        for config in configs.values():
+            assert isinstance(config, EndpointConfig)
+            assert isinstance(config.data_type, EnergyDataType)
+            assert isinstance(config.expected_interval, timedelta)
+            assert isinstance(config.max_chunk_days, int)
+            assert isinstance(config.rate_limit_delay, float)
+            assert isinstance(config.is_forward_looking, bool)
+            assert isinstance(config.forecast_horizon, timedelta)
+
+    def test_actual_load_is_backward_looking(
+        self, entsoe_data_service: EntsoEDataService
+    ) -> None:
+        """Test that ACTUAL_LOAD endpoint is configured as backward-looking."""
+        config = entsoe_data_service.ENDPOINT_CONFIGS[EndpointNames.ACTUAL_LOAD]
+        assert config.is_forward_looking is False
+        assert config.data_type == EnergyDataType.ACTUAL
+
+    def test_forecast_endpoints_are_forward_looking(
+        self, entsoe_data_service: EntsoEDataService
+    ) -> None:
+        """Test that all forecast endpoints are configured as forward-looking."""
+        forecast_endpoints = [
+            EndpointNames.DAY_AHEAD_FORECAST,
+            EndpointNames.WEEK_AHEAD_FORECAST,
+            EndpointNames.MONTH_AHEAD_FORECAST,
+            EndpointNames.YEAR_AHEAD_FORECAST,
+            EndpointNames.FORECAST_MARGIN,
+        ]
+
+        for endpoint_name in forecast_endpoints:
+            config = entsoe_data_service.ENDPOINT_CONFIGS[endpoint_name]
+            assert config.is_forward_looking is True, (
+                f"{endpoint_name} should be forward-looking"
+            )
+            assert config.forecast_horizon > timedelta(0), (
+                f"{endpoint_name} should have positive forecast horizon"
+            )
+
+    def test_forecast_horizons_are_reasonable(
+        self, entsoe_data_service: EntsoEDataService
+    ) -> None:
+        """Test that forecast horizons are reasonable for each endpoint type."""
+        configs = entsoe_data_service.ENDPOINT_CONFIGS
+
+        # Day-ahead should be around 1-3 days
+        day_ahead_horizon = configs[EndpointNames.DAY_AHEAD_FORECAST].forecast_horizon
+        assert timedelta(hours=12) <= day_ahead_horizon <= timedelta(days=7)
+
+        # Week-ahead should be around 1-4 weeks
+        week_ahead_horizon = configs[EndpointNames.WEEK_AHEAD_FORECAST].forecast_horizon
+        assert timedelta(days=7) <= week_ahead_horizon <= timedelta(days=35)
+
+        # Month-ahead should be around 1-3 months
+        month_ahead_horizon = configs[
+            EndpointNames.MONTH_AHEAD_FORECAST
+        ].forecast_horizon
+        assert timedelta(days=28) <= month_ahead_horizon <= timedelta(days=100)
+
+        # Year-ahead should be around 1-3 years
+        year_ahead_horizon = configs[EndpointNames.YEAR_AHEAD_FORECAST].forecast_horizon
+        assert timedelta(days=365) <= year_ahead_horizon <= timedelta(days=1100)
+
+
+class TestDetectGapForEndpointNewBehavior:
+    """Test cases for the new gap detection behavior with forward/backward looking logic."""
+
+    @pytest.mark.asyncio
+    async def test_detect_gap_backward_looking_no_data(
+        self, entsoe_data_service: EntsoEDataService, mock_repository: AsyncMock
+    ) -> None:
+        """Test gap detection for backward-looking endpoint with no existing data."""
+        # Setup
+        area = AreaCode.DE_LU
+        config = EndpointConfig(
+            data_type=EnergyDataType.ACTUAL,
+            expected_interval=timedelta(minutes=5),
+            max_chunk_days=3,
+            rate_limit_delay=1.0,
+            is_forward_looking=False,
+        )
+        mock_repository.get_latest_for_area_and_type.return_value = None
+
+        # Execute
+        gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
+            area, config
+        )
+
+        # Verify
+        mock_repository.get_latest_for_area_and_type.assert_called_once_with(
+            area.area_code, config.data_type
+        )
+
+        # Should look 7 days back for backward-looking endpoint with no data
+        expected_duration = gap_end - gap_start
+        assert expected_duration == timedelta(days=7)
+        assert gap_end <= datetime.now(UTC)  # End should be at or before current time
+
+    @pytest.mark.asyncio
+    async def test_detect_gap_backward_looking_with_data(
+        self, entsoe_data_service: EntsoEDataService, mock_repository: AsyncMock
+    ) -> None:
+        """Test gap detection for backward-looking endpoint with existing data."""
+        # Setup
+        area = AreaCode.DE_LU
+        config = EndpointConfig(
+            data_type=EnergyDataType.ACTUAL,
+            expected_interval=timedelta(minutes=5),
+            max_chunk_days=3,
+            rate_limit_delay=1.0,
+            is_forward_looking=False,
+        )
+
+        latest_timestamp = datetime.now(UTC) - timedelta(hours=2)
+        mock_data_point = MagicMock()
+        mock_data_point.timestamp = latest_timestamp
+        mock_repository.get_latest_for_area_and_type.return_value = mock_data_point
+
+        # Execute
+        gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
+            area, config
+        )
+
+        # Verify
+        expected_gap_start = latest_timestamp + config.expected_interval
+        assert gap_start == expected_gap_start
+        assert gap_end <= datetime.now(UTC)  # End should be at or before current time
+
+    @pytest.mark.asyncio
+    async def test_detect_gap_forward_looking_no_data(
+        self, entsoe_data_service: EntsoEDataService, mock_repository: AsyncMock
+    ) -> None:
+        """Test gap detection for forward-looking endpoint with no existing data."""
+        # Setup
+        area = AreaCode.DE_LU
+        forecast_horizon = timedelta(days=2)
+        config = EndpointConfig(
+            data_type=EnergyDataType.DAY_AHEAD,
+            expected_interval=timedelta(minutes=15),
+            max_chunk_days=7,
+            rate_limit_delay=1.0,
+            is_forward_looking=True,
+            forecast_horizon=forecast_horizon,
+        )
+        mock_repository.get_latest_for_area_and_type.return_value = None
+
+        # Execute
+        gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
+            area, config
+        )
+
+        # Verify
+        current_time = datetime.now(UTC)
+        assert gap_start >= current_time - timedelta(
+            minutes=1
+        )  # Allow for small time differences
+        assert gap_end == gap_start + forecast_horizon
+
+    @pytest.mark.asyncio
+    async def test_detect_gap_forward_looking_with_data(
+        self, entsoe_data_service: EntsoEDataService, mock_repository: AsyncMock
+    ) -> None:
+        """Test gap detection for forward-looking endpoint with existing data."""
+        # Setup
+        area = AreaCode.DE_LU
+        forecast_horizon = timedelta(days=2)
+        config = EndpointConfig(
+            data_type=EnergyDataType.DAY_AHEAD,
+            expected_interval=timedelta(minutes=15),
+            max_chunk_days=7,
+            rate_limit_delay=1.0,
+            is_forward_looking=True,
+            forecast_horizon=forecast_horizon,
+        )
+
+        latest_timestamp = datetime.now(UTC) - timedelta(hours=1)
+        mock_data_point = MagicMock()
+        mock_data_point.timestamp = latest_timestamp
+        mock_repository.get_latest_for_area_and_type.return_value = mock_data_point
+
+        # Execute
+        gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
+            area, config
+        )
+
+        # Verify
+        expected_gap_start = latest_timestamp + config.expected_interval
+        current_time = datetime.now(UTC)
+        expected_gap_end = current_time + forecast_horizon
+
+        assert gap_start == expected_gap_start
+        # Allow for small time differences in the end time
+        assert abs((gap_end - expected_gap_end).total_seconds()) < 60
+
+    @pytest.mark.asyncio
+    async def test_detect_gap_different_forecast_horizons(
+        self, entsoe_data_service: EntsoEDataService, mock_repository: AsyncMock
+    ) -> None:
+        """Test that different forecast horizons are respected."""
+        area = AreaCode.DE_LU
+        mock_repository.get_latest_for_area_and_type.return_value = None
+
+        test_cases = [
+            (timedelta(days=1), "day_ahead"),
+            (timedelta(weeks=1), "week_ahead"),
+            (timedelta(days=30), "month_ahead"),
+            (timedelta(days=365), "year_ahead"),
+        ]
+
+        for forecast_horizon, description in test_cases:
+            config = EndpointConfig(
+                data_type=EnergyDataType.DAY_AHEAD,
+                expected_interval=timedelta(minutes=15),
+                max_chunk_days=7,
+                rate_limit_delay=1.0,
+                is_forward_looking=True,
+                forecast_horizon=forecast_horizon,
+            )
+
+            gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
+                area, config
+            )
+
+            actual_horizon = gap_end - gap_start
+            assert actual_horizon == forecast_horizon, (
+                f"Failed for {description}: expected {forecast_horizon}, got {actual_horizon}"
+            )
+
+
 @pytest.mark.asyncio
 class TestEntsoEDataService:
     """Test suite for the EntsoEDataService."""
