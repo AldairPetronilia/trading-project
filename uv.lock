@@ -257,7 +257,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pydantic-xml" },
-    { name = "pytest-xdist" },
     { name = "pyyaml" },
     { name = "tenacity" },
 ]
@@ -276,7 +275,6 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "pydantic-xml", specifier = ">=2.17.2" },
-    { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "tenacity", specifier = ">=9.0.0" },
 ]
