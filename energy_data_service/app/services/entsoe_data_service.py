@@ -480,10 +480,9 @@ class EntsoEDataService:
         config = self.ENDPOINT_CONFIGS[endpoint_name]
 
         # Get latest data for this area/endpoint
-        latest_point = await self._repository.get_latest_for_area(
+        latest_point = await self._repository.get_latest_for_area_and_type(
             area.area_code or str(area.code),
             config.data_type,
-            BusinessType.CONSUMPTION.code,
         )
 
         if not latest_point:
@@ -510,10 +509,9 @@ class EntsoEDataService:
         area_name = area.area_code or str(area.code)
 
         # Get latest data point for this area/endpoint
-        latest_point = await self._repository.get_latest_for_area(
+        latest_point = await self._repository.get_latest_for_area_and_type(
             area_name,
             config.data_type,
-            BusinessType.CONSUMPTION.code,
         )
 
         if not latest_point:

@@ -59,7 +59,7 @@ class TestEntsoEDataService:
         """
         Test collect_gaps_for_area successfully collects for all endpoints.
         """
-        mock_repository.get_latest_for_area.return_value = (
+        mock_repository.get_latest_for_area_and_type.return_value = (
             None  # No existing data, forcing a gap
         )
 
@@ -90,7 +90,7 @@ class TestEntsoEDataService:
         """
         Test that collect_gaps_for_area handles CollectorError exceptions in one endpoint and continues.
         """
-        mock_repository.get_latest_for_area.return_value = None
+        mock_repository.get_latest_for_area_and_type.return_value = None
 
         with patch.object(
             entsoe_data_service, "collect_gaps_for_endpoint", new_callable=AsyncMock
@@ -133,7 +133,7 @@ class TestEntsoEDataService:
         """
         Test that collect_gaps_for_area handles EntsoEClientException and maps it to CollectorError.
         """
-        mock_repository.get_latest_for_area.return_value = None
+        mock_repository.get_latest_for_area_and_type.return_value = None
 
         with patch.object(
             entsoe_data_service, "collect_gaps_for_endpoint", new_callable=AsyncMock
@@ -189,7 +189,7 @@ class TestEntsoEDataService:
         latest_point = EnergyDataPoint(
             timestamp=datetime.now(UTC) - timedelta(minutes=1)
         )
-        mock_repository.get_latest_for_area.return_value = latest_point
+        mock_repository.get_latest_for_area_and_type.return_value = latest_point
 
         result = await entsoe_data_service.collect_gaps_for_endpoint(
             AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
@@ -197,8 +197,8 @@ class TestEntsoEDataService:
 
         assert result.stored_count == 0
         assert result.success is True
-        mock_repository.get_latest_for_area.assert_called_once_with(
-            "DE", EnergyDataType.ACTUAL, BusinessType.CONSUMPTION.code
+        mock_repository.get_latest_for_area_and_type.assert_called_once_with(
+            "DE", EnergyDataType.ACTUAL
         )
 
     async def test_collect_gaps_for_endpoint_with_gap(
@@ -209,7 +209,7 @@ class TestEntsoEDataService:
         """
         # Simulate that the latest data point is old
         latest_point = EnergyDataPoint(timestamp=datetime.now(UTC) - timedelta(days=1))
-        mock_repository.get_latest_for_area.return_value = latest_point
+        mock_repository.get_latest_for_area_and_type.return_value = latest_point
 
         with patch.object(
             entsoe_data_service, "collect_with_chunking", new_callable=AsyncMock
@@ -380,7 +380,7 @@ class TestEntsoEDataService:
         """
         # Last data point is older than the expected interval (5 mins for actual load)
         latest_point = EnergyDataPoint(timestamp=datetime.now(UTC) - timedelta(hours=1))
-        mock_repository.get_latest_for_area.return_value = latest_point
+        mock_repository.get_latest_for_area_and_type.return_value = latest_point
 
         result = await entsoe_data_service.should_collect_now(
             AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
@@ -393,7 +393,7 @@ class TestEntsoEDataService:
         """
         Test should_collect_now returns True when no data exists yet.
         """
-        mock_repository.get_latest_for_area.return_value = None
+        mock_repository.get_latest_for_area_and_type.return_value = None
         result = await entsoe_data_service.should_collect_now(
             AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
         )
@@ -409,7 +409,7 @@ class TestEntsoEDataService:
         latest_point = EnergyDataPoint(
             timestamp=datetime.now(UTC) - timedelta(minutes=1)
         )
-        mock_repository.get_latest_for_area.return_value = latest_point
+        mock_repository.get_latest_for_area_and_type.return_value = latest_point
 
         result = await entsoe_data_service.should_collect_now(
             AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD
@@ -425,7 +425,7 @@ class TestEntsoEDataService:
         config = entsoe_data_service.ENDPOINT_CONFIGS[EndpointNames.ACTUAL_LOAD]
         latest_timestamp = datetime.now(UTC) - timedelta(days=1)
         latest_point = EnergyDataPoint(timestamp=latest_timestamp)
-        mock_repository.get_latest_for_area.return_value = latest_point
+        mock_repository.get_latest_for_area_and_type.return_value = latest_point
 
         gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
             AreaCode.GERMANY, config
@@ -442,7 +442,7 @@ class TestEntsoEDataService:
         Test _detect_gap_for_endpoint when there is no existing data.
         """
         config = entsoe_data_service.ENDPOINT_CONFIGS[EndpointNames.ACTUAL_LOAD]
-        mock_repository.get_latest_for_area.return_value = None
+        mock_repository.get_latest_for_area_and_type.return_value = None
 
         gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
             AreaCode.GERMANY, config

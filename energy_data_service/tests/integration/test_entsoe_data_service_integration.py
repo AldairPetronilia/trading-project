@@ -821,6 +821,85 @@ class TestEntsoEDataServiceIntegration:
         assert EnergyDataType.DAY_AHEAD in data_types
 
     @pytest.mark.asyncio
+    async def test_repository_method_ignores_business_type(
+        self,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """Test the new get_latest_for_area_and_type method ignores business type.
+
+        This test validates the fix for the business type filtering issue where
+        get_latest_for_area() was hardcoded to use BusinessType.CONSUMPTION but
+        the actual data might have different business types from the ENTSO-E API.
+        """
+        current_time = datetime.now(UTC)
+        recent_time = current_time - timedelta(minutes=1)
+
+        # Insert data with PRODUCTION business type (not CONSUMPTION)
+        production_data = EnergyDataPoint(
+            timestamp=recent_time,
+            area_code="DE-LU",
+            data_type=EnergyDataType.DAY_AHEAD,
+            business_type=BusinessType.PRODUCTION.code,  # A01, not A04 (CONSUMPTION)
+            quantity=Decimal("1500.000"),
+            unit="MAW",
+            data_source="entsoe",
+            document_mrid="test-doc-production",
+            revision_number=1,
+            document_created_at=recent_time,
+            time_series_mrid="test-ts-production",
+            resolution="PT60M",
+            curve_type="A01",
+            object_aggregation="A01",
+            position=1,
+            period_start=recent_time,
+            period_end=recent_time + timedelta(hours=1),
+        )
+        await energy_repository.upsert_batch([production_data])
+
+        # Test that the new method finds data regardless of business type
+        latest_data = await energy_repository.get_latest_for_area_and_type(
+            "DE-LU", EnergyDataType.DAY_AHEAD
+        )
+        assert latest_data is not None
+        assert latest_data.business_type == BusinessType.PRODUCTION.code
+
+        # Verify the old method would NOT find this data (demonstrating the bug)
+        old_method_data = await energy_repository.get_latest_for_area(
+            "DE-LU", EnergyDataType.DAY_AHEAD, BusinessType.CONSUMPTION.code
+        )
+        assert old_method_data is None  # This demonstrates the original bug
+
+        # Insert another data point with CONSUMPTION business type
+        consumption_data = EnergyDataPoint(
+            timestamp=recent_time + timedelta(minutes=30),
+            area_code="DE-LU",
+            data_type=EnergyDataType.DAY_AHEAD,
+            business_type=BusinessType.CONSUMPTION.code,  # A04
+            quantity=Decimal("1600.000"),
+            unit="MAW",
+            data_source="entsoe",
+            document_mrid="test-doc-consumption",
+            revision_number=1,
+            document_created_at=recent_time,
+            time_series_mrid="test-ts-consumption",
+            resolution="PT60M",
+            curve_type="A01",
+            object_aggregation="A01",
+            position=1,
+            period_start=recent_time + timedelta(minutes=30),
+            period_end=recent_time + timedelta(minutes=90),
+        )
+        await energy_repository.upsert_batch([consumption_data])
+
+        # Now the new method should return the most recent data (consumption data)
+        latest_data_after = await energy_repository.get_latest_for_area_and_type(
+            "DE-LU", EnergyDataType.DAY_AHEAD
+        )
+        assert latest_data_after is not None
+        assert latest_data_after.business_type == BusinessType.CONSUMPTION.code
+        assert latest_data_after.quantity == Decimal("1600.000")
+
+    @pytest.mark.asyncio
     async def test_concurrent_area_collection(
         self,
         entsoe_data_service_with_real_db: EntsoEDataService,
