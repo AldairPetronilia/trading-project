@@ -14,6 +14,9 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from entsoe_client.exceptions.unknown_area_code_error import UnknownAreaCodeError
+from entsoe_client.model.common.area_code import AreaCode
+
 # Constants
 MIN_PORT = 1
 MAX_PORT = 65535
@@ -156,6 +159,37 @@ class BackfillConfig(BaseModel):
         default=True,
         description="Enable data collection verification and summary on startup",
     )
+
+
+class EntsoEDataCollectionConfig(BaseModel):
+    """ENTSO-E data collection configuration."""
+
+    target_areas: list[str] = Field(
+        default=["DE-LU", "DE-AT-LU"],
+        description="List of ENTSO-E area codes to collect data for (e.g., DE-LU, FR, NL)",
+    )
+
+    @field_validator("target_areas")  # type: ignore[misc]
+    @classmethod
+    def validate_area_codes(cls, v: list[str]) -> list[str]:
+        """Validate that all area codes exist in AreaCode enum."""
+        for area_code in v:
+            # Try conversion using both methods
+            try:
+                # First try direct enum lookup by area_code attribute
+                found = False
+                for area_enum in AreaCode:
+                    if area_code in (area_enum.area_code, area_enum.code):
+                        found = True
+                        break
+
+                if not found:
+                    # Fallback to from_code method
+                    AreaCode.from_code(area_code)
+            except (UnknownAreaCodeError, Exception) as e:
+                msg = f"Invalid ENTSO-E area code: {area_code}. Check AreaCode enum for valid values. Error: {e}"
+                raise ConfigValidationError(msg) from e
+        return v
 
 
 class SchedulerConfig(BaseModel):
@@ -362,6 +396,10 @@ class Settings(BaseSettings):
     entsoe_client: EntsoEClientConfig = Field(
         default_factory=EntsoEClientConfig,
         description="ENTSO-E client configuration",
+    )
+    entsoe_data_collection: EntsoEDataCollectionConfig = Field(
+        default_factory=EntsoEDataCollectionConfig,
+        description="ENTSO-E data collection configuration",
     )
     logging: LoggingConfig = Field(
         default_factory=LoggingConfig,

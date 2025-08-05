@@ -345,6 +345,10 @@ async def backfill_service_with_real_db(
     # Use real processor from container
     processor = container.gl_market_document_processor()
 
+    # Get configuration from container
+    settings = container.config()
+    entsoe_data_collection_config = settings.entsoe_data_collection
+
     # Create service with mocked collector, real processor, real repository, and real database
     return BackfillService(
         collector=mock_collector,
@@ -353,6 +357,7 @@ async def backfill_service_with_real_db(
         database=initialized_database,
         config=backfill_config,
         progress_repository=backfill_progress_repository,
+        entsoe_data_collection_config=entsoe_data_collection_config,
     )
 
 

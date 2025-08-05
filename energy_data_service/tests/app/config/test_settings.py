@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from app.config.settings import BackfillConfig, Settings
+from app.config.settings import BackfillConfig, EntsoEDataCollectionConfig, Settings
 from pydantic import ValidationError
 
 
@@ -547,3 +547,107 @@ class TestBackfillConfig:
         assert settings.backfill.max_concurrent_areas == 2
         assert settings.backfill.enable_progress_persistence is False
         assert settings.backfill.resume_incomplete_backfills is False
+
+
+class TestEntsoEDataCollectionConfig:
+    """Test suite for EntsoEDataCollectionConfig validation and functionality."""
+
+    def test_entsoe_data_collection_config_defaults(self) -> None:
+        """Test EntsoEDataCollectionConfig default values."""
+        config = EntsoEDataCollectionConfig()
+
+        assert config.target_areas == ["DE-LU", "DE-AT-LU"]
+
+    def test_entsoe_data_collection_config_custom_values(self) -> None:
+        """Test EntsoEDataCollectionConfig with custom values."""
+        config = EntsoEDataCollectionConfig(target_areas=["FR", "NL", "BE"])
+
+        assert config.target_areas == ["FR", "NL", "BE"]
+
+    def test_entsoe_data_collection_config_valid_area_codes(self) -> None:
+        """Test EntsoEDataCollectionConfig with valid area codes."""
+        # Test with various valid area codes
+        valid_area_codes = [
+            ["DE-LU"],
+            ["FR", "NL"],
+            ["DE-AT-LU", "FR", "NL", "BE"],
+            ["ES", "PT"],
+        ]
+
+        for area_codes in valid_area_codes:
+            config = EntsoEDataCollectionConfig(target_areas=area_codes)
+            assert config.target_areas == area_codes
+
+    def test_entsoe_data_collection_config_invalid_area_codes(self) -> None:
+        """Test EntsoEDataCollectionConfig validation with invalid area codes."""
+        invalid_area_codes = [
+            ["INVALID"],
+            ["DE-LU", "INVALID_CODE"],
+            ["XX", "YY", "ZZ"],
+            [""],
+            ["NOTACODE"],
+        ]
+
+        for area_codes in invalid_area_codes:
+            with pytest.raises(ValidationError) as exc_info:
+                EntsoEDataCollectionConfig(target_areas=area_codes)
+            assert "Invalid ENTSO-E area code" in str(exc_info.value)
+
+    def test_entsoe_data_collection_config_empty_list(self) -> None:
+        """Test EntsoEDataCollectionConfig with empty area list."""
+        # Empty list should be valid (though probably not useful)
+        config = EntsoEDataCollectionConfig(target_areas=[])
+        assert config.target_areas == []
+
+    def test_entsoe_data_collection_config_area_code_normalization(self) -> None:
+        """Test that area codes are validated against AreaCode enum."""
+        # These should work with both area_code and code attributes
+        config = EntsoEDataCollectionConfig(target_areas=["DE-LU", "FR"])
+        assert "DE-LU" in config.target_areas
+        assert "FR" in config.target_areas
+
+    def test_entsoe_data_collection_config_integration_in_settings(self) -> None:
+        """Test EntsoEDataCollectionConfig integration in Settings class."""
+        settings = Settings(
+            entsoe_client={"api_token": "test-token-123"},
+            _env_file=None,
+        )
+
+        # Test that EntsoEDataCollectionConfig is properly initialized
+        assert hasattr(settings, "entsoe_data_collection")
+        assert isinstance(settings.entsoe_data_collection, EntsoEDataCollectionConfig)
+        assert settings.entsoe_data_collection.target_areas == ["DE-LU", "DE-AT-LU"]
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENTSOE_CLIENT__API_TOKEN": "test-token-123456",
+            "ENTSOE_DATA_COLLECTION__TARGET_AREAS": '["FR", "NL", "BE"]',
+        },
+        clear=True,
+    )
+    def test_entsoe_data_collection_config_environment_variables(self) -> None:
+        """Test EntsoEDataCollectionConfig loading from environment variables."""
+        settings = Settings()
+
+        assert settings.entsoe_data_collection.target_areas == ["FR", "NL", "BE"]
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENTSOE_CLIENT__API_TOKEN": "test-token-123456",
+            "ENTSOE_DATA_COLLECTION__TARGET_AREAS": '["INVALID_CODE"]',
+        },
+        clear=True,
+    )
+    def test_entsoe_data_collection_config_invalid_env_vars(self) -> None:
+        """Test EntsoEDataCollectionConfig with invalid environment variables."""
+        with pytest.raises(ValidationError) as exc_info:
+            Settings()
+        assert "Invalid ENTSO-E area code: INVALID_CODE" in str(exc_info.value)
+
+    def test_entsoe_data_collection_config_mixed_valid_invalid(self) -> None:
+        """Test validation when mix of valid and invalid area codes is provided."""
+        with pytest.raises(ValidationError) as exc_info:
+            EntsoEDataCollectionConfig(target_areas=["FR", "INVALID", "NL"])
+        assert "Invalid ENTSO-E area code: INVALID" in str(exc_info.value)
