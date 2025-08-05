@@ -53,3 +53,5 @@ data/timescaledb/
 data/grafana
 
 repomix-output.xml
+.serena
+digest.txt
