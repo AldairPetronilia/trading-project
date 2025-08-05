@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from pydantic import field_serializer, field_validator
-from pydantic_xml import BaseXmlModel, element
+from pydantic_xml import BaseXmlModel, attr, element
 
 from entsoe_client.adapters import date_time_adapter
 
@@ -27,7 +27,9 @@ class AcknowledgementMarketDocument(
         <mRID>73e41c75-ae22-4</mRID>
         <createdDateTime>2025-08-04T19:55:30Z</createdDateTime>
         <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
+        <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
         <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
+        <receiver_MarketParticipant.marketRole.type>A39</receiver_MarketParticipant.marketRole.type>
         <received_MarketDocument.createdDateTime>2025-08-04T19:55:30Z</received_MarketDocument.createdDateTime>
         <Reason>
             <code>999</code>
@@ -39,12 +41,22 @@ class AcknowledgementMarketDocument(
 
     mRID: str = element(tag="mRID")
     createdDateTime: datetime = element(tag="createdDateTime")
+
+    # Create nested objects but with proper field mapping for the extra marketRole.type fields
     senderMarketParticipantMRID: AcknowledgementMarketParticipant = element(
         tag="sender_MarketParticipant.mRID",
     )
+    senderMarketRoleType: str | None = element(
+        tag="sender_MarketParticipant.marketRole.type", default=None
+    )
+
     receiverMarketParticipantMRID: AcknowledgementMarketParticipant = element(
         tag="receiver_MarketParticipant.mRID",
     )
+    receiverMarketRoleType: str | None = element(
+        tag="receiver_MarketParticipant.marketRole.type", default=None
+    )
+
     receivedMarketDocumentCreatedDateTime: datetime = element(
         tag="received_MarketDocument.createdDateTime",
     )
@@ -75,6 +87,17 @@ class AcknowledgementMarketDocument(
         if isinstance(value, str):
             return date_time_adapter.decode_content(value)
         return value
+
+    # Backward compatibility properties
+    @property
+    def sender_market_participant_coding_scheme(self) -> str | None:
+        """Get sender market participant coding scheme for backward compatibility."""
+        return self.senderMarketParticipantMRID.codingScheme
+
+    @property
+    def receiver_market_participant_coding_scheme(self) -> str | None:
+        """Get receiver market participant coding scheme for backward compatibility."""
+        return self.receiverMarketParticipantMRID.codingScheme
 
     @property
     def reason_code(self) -> str:
