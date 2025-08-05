@@ -13,7 +13,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from app.config.settings import BackfillConfig
+from app.config.settings import BackfillConfig, EntsoEDataCollectionConfig
 from app.exceptions import (
     BackfillCoverageError,
     BackfillError,
@@ -82,6 +82,11 @@ class TestBackfillService:
         )
 
     @pytest.fixture
+    def entsoe_data_collection_config(self) -> EntsoEDataCollectionConfig:
+        """Create an ENTSO-E data collection configuration."""
+        return EntsoEDataCollectionConfig(target_areas=["DE-LU", "DE-AT-LU"])
+
+    @pytest.fixture
     def backfill_service(
         self,
         mock_collector: AsyncMock,
@@ -90,6 +95,7 @@ class TestBackfillService:
         mock_database: AsyncMock,
         backfill_config: BackfillConfig,
         mock_progress_repository: AsyncMock,
+        entsoe_data_collection_config: EntsoEDataCollectionConfig,
     ) -> BackfillService:
         """Create a BackfillService with mocked dependencies."""
         return BackfillService(
@@ -99,6 +105,7 @@ class TestBackfillService:
             database=mock_database,
             config=backfill_config,
             progress_repository=mock_progress_repository,
+            entsoe_data_collection_config=entsoe_data_collection_config,
         )
 
     @pytest.fixture

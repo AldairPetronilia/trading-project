@@ -9,13 +9,12 @@ the need for session.merge() workarounds and cross-session object issues.
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, desc, select
-from sqlalchemy.exc import SQLAlchemyError
-
 from app.config.database import Database
 from app.exceptions.repository_exceptions import DataAccessError
 from app.models.backfill_progress import BackfillProgress, BackfillStatus
 from app.repositories.base_repository import BaseRepository
+from sqlalchemy import and_, desc, select
+from sqlalchemy.exc import SQLAlchemyError
 
 
 class BackfillProgressRepository(BaseRepository[BackfillProgress]):

@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 
     from app.collectors.entsoe_collector import EntsoeCollector
     from app.config.database import Database
-    from app.config.settings import BackfillConfig
+    from app.config.settings import BackfillConfig, EntsoEDataCollectionConfig
     from app.processors.gl_market_document_processor import (
         GlMarketDocumentProcessor,
     )
@@ -217,6 +217,7 @@ class BackfillService:
         database: Database,
         config: BackfillConfig,
         progress_repository: BackfillProgressRepository,
+        entsoe_data_collection_config: EntsoEDataCollectionConfig,
     ) -> None:
         """
         Initialize the backfill service.
@@ -228,6 +229,7 @@ class BackfillService:
             database: Database instance for session management
             config: Backfill configuration settings
             progress_repository: Repository for backfill progress operations
+            entsoe_data_collection_config: ENTSO-E data collection configuration
         """
         self._collector = collector
         self._processor = processor
@@ -235,6 +237,7 @@ class BackfillService:
         self._database = database
         self._config = config
         self._progress_repository = progress_repository
+        self._entsoe_data_collection_config = entsoe_data_collection_config
         self._active_operations: dict[str, BackfillProgress] = {}
 
     async def analyze_coverage(
@@ -260,7 +263,7 @@ class BackfillService:
         try:
             # Use defaults if not specified
             if areas is None:
-                areas = [AreaCode.DE_LU, AreaCode.DE_AT_LU]
+                areas = self._get_configured_areas()
             if endpoints is None:
                 endpoints = list(self.ENDPOINT_INTERVALS.keys())
             if years_back is None:
@@ -582,6 +585,24 @@ class BackfillService:
             if progress.estimated_completion
             else None,
         }
+
+    def _get_configured_areas(self) -> list[AreaCode]:
+        """Get configured ENTSO-E areas from settings."""
+        areas = []
+        for area_code in self._entsoe_data_collection_config.target_areas:
+            # Try to find by area_code attribute first
+            for area_enum in AreaCode:
+                if area_enum.area_code == area_code:
+                    areas.append(area_enum)
+                    break
+            else:
+                # Fallback to from_code method
+                try:
+                    areas.append(AreaCode.from_code(area_code))
+                except Exception:  # noqa: BLE001
+                    # Log warning and skip invalid area code
+                    log.warning("Skipping invalid ENTSO-E area code: %s", area_code)
+        return areas
 
     # Private helper methods
 

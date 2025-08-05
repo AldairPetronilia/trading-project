@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from app.config.settings import EntsoEDataCollectionConfig
 from app.exceptions.collector_exceptions import CollectorError
 from app.models.load_data import EnergyDataPoint, EnergyDataType
 from app.services.entsoe_data_service import (
@@ -42,11 +43,22 @@ def mock_repository() -> AsyncMock:
 
 
 @pytest.fixture
+def entsoe_data_collection_config() -> EntsoEDataCollectionConfig:
+    """Fixture for an ENTSO-E data collection configuration."""
+    return EntsoEDataCollectionConfig(target_areas=["DE-LU", "DE-AT-LU"])
+
+
+@pytest.fixture
 def entsoe_data_service(
-    mock_collector: AsyncMock, mock_processor: AsyncMock, mock_repository: AsyncMock
+    mock_collector: AsyncMock,
+    mock_processor: AsyncMock,
+    mock_repository: AsyncMock,
+    entsoe_data_collection_config: EntsoEDataCollectionConfig,
 ) -> EntsoEDataService:
     """Fixture for an EntsoEDataService instance with mocked dependencies."""
-    return EntsoEDataService(mock_collector, mock_processor, mock_repository)
+    return EntsoEDataService(
+        mock_collector, mock_processor, mock_repository, entsoe_data_collection_config
+    )
 
 
 class TestEndpointConfig:

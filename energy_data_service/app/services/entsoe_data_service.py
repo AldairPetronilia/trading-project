@@ -5,6 +5,7 @@ from enum import Enum
 from typing import ClassVar
 
 from app.collectors.entsoe_collector import EntsoeCollector
+from app.config.settings import EntsoEDataCollectionConfig
 from app.exceptions.collector_exceptions import (
     CollectorError,
     map_http_error_to_collector_error,
@@ -164,6 +165,7 @@ class EntsoEDataService:
         collector: EntsoeCollector,
         processor: GlMarketDocumentProcessor,
         repository: EnergyDataRepository,
+        entsoe_data_collection_config: EntsoEDataCollectionConfig,
     ) -> None:
         """
         Initialize the EntsoE data service.
@@ -172,10 +174,12 @@ class EntsoEDataService:
             collector: ENTSO-E data collector instance
             processor: GL market document processor instance
             repository: Energy data repository instance
+            entsoe_data_collection_config: ENTSO-E data collection configuration
         """
         self._collector = collector
         self._processor = processor
         self._repository = repository
+        self._entsoe_data_collection_config = entsoe_data_collection_config
         self._logger = logging.getLogger(self.__class__.__name__)
 
     async def collect_gaps_for_area(
@@ -324,7 +328,7 @@ class EntsoEDataService:
         Returns:
             Nested dictionary mapping area codes to endpoint results
         """
-        areas = [AreaCode.DE_LU, AreaCode.DE_AT_LU]
+        areas = self._get_configured_areas()
         results = {}
 
         for area in areas:
@@ -514,6 +518,26 @@ class EntsoEDataService:
         next_collection_time = latest_point.timestamp + config.expected_interval
         return datetime.now(latest_point.timestamp.tzinfo) >= next_collection_time
 
+    def _get_configured_areas(self) -> list[AreaCode]:
+        """Get configured ENTSO-E areas from settings."""
+        areas = []
+        for area_code in self._entsoe_data_collection_config.target_areas:
+            # Try to find by area_code attribute first
+            for area_enum in AreaCode:
+                if area_enum.area_code == area_code:
+                    areas.append(area_enum)
+                    break
+            else:
+                # Fallback to from_code method
+                try:
+                    areas.append(AreaCode.from_code(area_code))
+                except Exception:  # noqa: BLE001
+                    # Log warning and skip invalid area code
+                    self._logger.warning(
+                        "Skipping invalid ENTSO-E area code: %s", area_code
+                    )
+        return areas
+
     async def _detect_gap_for_endpoint(
         self, area: AreaCode, config: EndpointConfig
     ) -> tuple[datetime, datetime]:
@@ -641,10 +665,11 @@ class EntsoEDataService:
 
         if result:
             time_series_count = len(result.timeSeries) if result.timeSeries else 0
-            total_points = sum(
+            point_counts = [
                 len(ts.period.points) if ts.period and ts.period.points else 0
                 for ts in (result.timeSeries or [])
-            )
+            ]
+            total_points = sum(point_counts)
 
             self._logger.debug(
                 "ENTSO-E API response received: area=%s, endpoint=%s, time_series=%d, total_points=%d",
