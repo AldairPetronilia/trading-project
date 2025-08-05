@@ -23,6 +23,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
+from app.exceptions.service_exceptions import (
+    SchedulerConfigurationError,
+    SchedulerError,
+    SchedulerJobError,
+    SchedulerStateError,
+)
 from apscheduler.executors.asyncio import (
     AsyncIOExecutor,
 )
@@ -37,13 +43,6 @@ from apscheduler.triggers.interval import (
     IntervalTrigger,
 )
 from sqlalchemy import text
-
-from app.exceptions.service_exceptions import (
-    SchedulerConfigurationError,
-    SchedulerError,
-    SchedulerJobError,
-    SchedulerStateError,
-)
 
 if TYPE_CHECKING:
     from collections.abc import Callable

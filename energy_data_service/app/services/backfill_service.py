@@ -22,8 +22,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 
-from sqlalchemy import select
-
 from app.exceptions import (
     BackfillCoverageError,
     BackfillDataQualityError,
@@ -41,6 +39,8 @@ from app.models.backfill_progress import (
     BackfillProgress as BackfillProgressModel,
 )
 from app.models.load_data import EnergyDataType
+from sqlalchemy import select
+
 from entsoe_client.model.common.area_code import AreaCode
 from entsoe_client.model.load.gl_market_document import GlMarketDocument
 

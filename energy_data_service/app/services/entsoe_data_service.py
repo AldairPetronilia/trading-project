@@ -44,6 +44,8 @@ class CollectionResult:
         stored_count: int = 0,
         success: bool = True,
         error_message: str | None = None,
+        no_data_available: bool = False,
+        no_data_reason: str | None = None,
     ) -> None:
         self.stored_count = stored_count
         self.start_time = datetime.now(UTC)
@@ -52,6 +54,8 @@ class CollectionResult:
         self.data_type = data_type
         self.success = success
         self.error_message = error_message
+        self.no_data_available = no_data_available
+        self.no_data_reason = no_data_reason
 
     def set_time_range(self, start_time: datetime, end_time: datetime) -> None:
         """Set the time range for this collection result."""
@@ -351,6 +355,7 @@ class EntsoEDataService:
         area_name = area.area_code or str(area.code)
         config = self.ENDPOINT_CONFIGS[endpoint_name]
         total_stored = 0
+        no_data_chunks = 0
 
         chunks = self._create_time_chunks(start_time, end_time, config.max_chunk_days)
 
@@ -404,8 +409,9 @@ class EntsoEDataService:
                         endpoint_name.value,
                     )
                 else:
-                    self._logger.debug(
-                        "No data returned for chunk %d/%d (area %s, endpoint %s)",
+                    no_data_chunks += 1
+                    self._logger.info(
+                        "No data available for chunk %d/%d (area %s, endpoint %s) - acknowledgement received",
                         i,
                         len(chunks),
                         area_name,
@@ -459,17 +465,22 @@ class EntsoEDataService:
                 continue
 
         self._logger.info(
-            "Completed chunked collection for area %s, endpoint %s: %d total records stored from %d chunks",
+            "Completed chunked collection for area %s, endpoint %s: %d total records stored from %d chunks (%d no-data chunks)",
             area_name,
             endpoint_name.value,
             total_stored,
             len(chunks),
+            no_data_chunks,
         )
 
         result = CollectionResult(
             area=area,
             data_type=config.data_type,
             stored_count=total_stored,
+            no_data_available=no_data_chunks > 0,
+            no_data_reason=f"{no_data_chunks}/{len(chunks)} chunks returned no data"
+            if no_data_chunks > 0
+            else None,
         )
         result.set_time_range(start_time, end_time)
         return result

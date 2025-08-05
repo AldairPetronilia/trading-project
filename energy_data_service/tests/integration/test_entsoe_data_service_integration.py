@@ -324,6 +324,17 @@ def mock_entsoe_responses() -> dict[str | EndpointNames, Any]:
         AreaCode.DE_AT_LU, ProcessType.WEEK_AHEAD
     )
 
+    # Germany-specific documents
+    germany_actual_doc = create_sample_gl_market_document(
+        AreaCode.GERMANY, ProcessType.REALISED
+    )
+    germany_day_ahead_doc = create_sample_gl_market_document(
+        AreaCode.GERMANY, ProcessType.DAY_AHEAD
+    )
+    germany_week_ahead_doc = create_sample_gl_market_document(
+        AreaCode.GERMANY, ProcessType.WEEK_AHEAD
+    )
+
     return {
         EndpointNames.ACTUAL_LOAD: de_lu_actual_doc,
         EndpointNames.DAY_AHEAD_FORECAST: de_lu_day_ahead_doc,
@@ -333,6 +344,14 @@ def mock_entsoe_responses() -> dict[str | EndpointNames, Any]:
         EndpointNames.FORECAST_MARGIN: de_lu_year_ahead_doc,  # Uses YEAR_AHEAD process type
         # Store area-specific documents for dynamic lookup
         "area_documents": {
+            AreaCode.GERMANY: {
+                EndpointNames.ACTUAL_LOAD: germany_actual_doc,
+                EndpointNames.DAY_AHEAD_FORECAST: germany_day_ahead_doc,
+                EndpointNames.WEEK_AHEAD_FORECAST: germany_week_ahead_doc,
+                EndpointNames.MONTH_AHEAD_FORECAST: germany_actual_doc,  # Fallback to actual
+                EndpointNames.YEAR_AHEAD_FORECAST: germany_actual_doc,  # Fallback to actual
+                EndpointNames.FORECAST_MARGIN: germany_actual_doc,  # Fallback to actual
+            },
             AreaCode.DE_LU: {
                 EndpointNames.ACTUAL_LOAD: de_lu_actual_doc,
                 EndpointNames.DAY_AHEAD_FORECAST: de_lu_day_ahead_doc,
@@ -370,6 +389,7 @@ def mock_collector(mock_entsoe_responses: dict[str | EndpointNames, Any]) -> Asy
         return side_effect
 
     # Configure each collector method to return area and endpoint-specific responses
+    # Note: individual tests can override these by setting return_value or side_effect directly
     collector.get_actual_total_load.side_effect = get_document_for_area_and_endpoint(
         EndpointNames.ACTUAL_LOAD
     )
@@ -1134,6 +1154,94 @@ class TestEntsoEDataServiceIntegration:
 
         # At least some should have succeeded (DE_AT_LU endpoints)
         assert success_count >= 0
+
+    @pytest.mark.asyncio
+    async def test_no_data_acknowledgement_handling_integration(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        mock_collector: AsyncMock,
+        energy_repository: EnergyDataRepository,
+    ) -> None:
+        """
+        Test end-to-end integration when collector returns None (no data acknowledgements).
+        This tests the Phase 2 implementation for graceful acknowledgement handling.
+        """
+        # Simulate collector returning None (no data available)
+        # Clear side_effect to allow return_value to work
+        mock_collector.get_actual_total_load.side_effect = None
+        mock_collector.get_actual_total_load.return_value = None
+
+        # Create test time range
+        start_time = datetime(2024, 1, 1, 0, 0, tzinfo=UTC)
+        end_time = datetime(2024, 1, 2, 0, 0, tzinfo=UTC)
+        area = AreaCode.DE_LU
+        endpoint = EndpointNames.ACTUAL_LOAD
+
+        # Execute collection
+        result = await entsoe_data_service_with_real_db.collect_with_chunking(
+            area=area, endpoint_name=endpoint, start_time=start_time, end_time=end_time
+        )
+
+        # Verify no-data handling in CollectionResult
+        assert result.stored_count == 0
+        assert result.success is True  # No-data is not an error
+        assert result.no_data_available is True
+        assert result.no_data_reason == "1/1 chunks returned no data"
+        assert result.error_message is None
+
+        # Verify no data was stored in the database
+        stored_data = await energy_repository.get_latest_for_area_and_type(
+            area.area_code or str(area.code), EnergyDataType.ACTUAL
+        )
+        assert stored_data is None
+
+        # Verify the collector was called correctly
+        mock_collector.get_actual_total_load.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_mixed_data_and_no_data_chunks_integration(
+        self,
+        entsoe_data_service_with_real_db: EntsoEDataService,
+        mock_collector: AsyncMock,
+        energy_repository: EnergyDataRepository,
+        sample_gl_market_document: GlMarketDocument,
+    ) -> None:
+        """
+        Test end-to-end integration with mixed chunks (some data, some no-data).
+        This tests the Phase 2 implementation for partial no-data scenarios.
+        """
+        # First chunk returns data, second chunk returns None
+        mock_collector.get_actual_total_load.side_effect = [
+            sample_gl_market_document,
+            None,
+        ]
+
+        # Create test time range that will result in 2 chunks (6 days = 2 x 3-day chunks)
+        start_time = datetime(2024, 1, 1, 0, 0, tzinfo=UTC)
+        end_time = datetime(2024, 1, 7, 0, 0, tzinfo=UTC)
+        area = AreaCode.DE_LU
+        endpoint = EndpointNames.ACTUAL_LOAD
+
+        # Execute collection
+        result = await entsoe_data_service_with_real_db.collect_with_chunking(
+            area=area, endpoint_name=endpoint, start_time=start_time, end_time=end_time
+        )
+
+        # Verify mixed results tracking
+        assert result.stored_count > 0  # Some data was stored from first chunk
+        assert result.success is True
+        assert result.no_data_available is True  # Because second chunk had no data
+        assert result.no_data_reason == "1/2 chunks returned no data"
+        assert result.error_message is None
+
+        # Verify data was stored in the database (from the first chunk)
+        stored_data = await energy_repository.get_latest_for_area_and_type(
+            area.area_code or str(area.code), EnergyDataType.ACTUAL
+        )
+        assert stored_data is not None
+
+        # Verify the collector was called twice (once per chunk)
+        assert mock_collector.get_actual_total_load.call_count == 2
 
         # Verify data was stored for successful collections
         # Data might or might not be stored depending on which specific calls succeeded

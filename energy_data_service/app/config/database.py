@@ -1,14 +1,13 @@
 import logging
 from collections.abc import AsyncGenerator
 
+from app.config.settings import DatabaseConfig, Settings
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-
-from app.config.settings import DatabaseConfig, Settings
 
 log = logging.getLogger(__name__)
 

@@ -1,10 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional, TypeVar
 
-from sqlalchemy import delete, select, update
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.config.database import Database
 from app.exceptions.repository_exceptions import (
     ConstraintViolationError,
@@ -14,6 +10,9 @@ from app.exceptions.repository_exceptions import (
     DuplicateDataError,
     RepositoryError,
 )
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 ModelType = TypeVar("ModelType")
 

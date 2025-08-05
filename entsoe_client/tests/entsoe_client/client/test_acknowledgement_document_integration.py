@@ -221,28 +221,23 @@ class TestAcknowledgementDocumentIntegration:
             period_end = period_start + timedelta(days=1)
 
             # Make request - should return None for no-data acknowledgement
-            # Note: This assumes the client has been updated to handle acknowledgements
-            # For now, we test that the parsing works and acknowledgement is detected
-            try:
-                await client_with_mock.get_year_ahead_forecast_margin(
-                    bidding_zone=AreaCode.CZECH_REPUBLIC,
-                    period_start=period_start,
-                    period_end=period_end,
-                )
-                # This will currently raise an exception since the client hasn't been updated yet
-                # In Phase 2, this should return None
-                pytest.fail(
-                    "Expected exception since client not yet updated for acknowledgements"
-                )
-            except EntsoEClientError:
-                # For now, verify that we can detect and parse the acknowledgement
-                xml_response = no_data_acknowledgement_xml
-                doc_type = XmlDocumentDetector.detect_document_type(xml_response)
-                assert doc_type == XmlDocumentType.ACKNOWLEDGEMENT_MARKET_DOCUMENT
+            result = await client_with_mock.get_year_ahead_forecast_margin(
+                bidding_zone=AreaCode.CZECH_REPUBLIC,
+                period_start=period_start,
+                period_end=period_end,
+            )
 
-                ack_doc = AcknowledgementMarketDocument.from_xml(xml_response)
-                assert ack_doc.is_no_data_available() is True
-                assert ack_doc.reason_code == "999"
+            # Phase 2 implementation: should return None for no-data acknowledgements
+            assert result is None
+
+            # Verify that the acknowledgement was properly detected and parsed
+            xml_response = no_data_acknowledgement_xml
+            doc_type = XmlDocumentDetector.detect_document_type(xml_response)
+            assert doc_type == XmlDocumentType.ACKNOWLEDGEMENT_MARKET_DOCUMENT
+
+            ack_doc = AcknowledgementMarketDocument.from_xml(xml_response)
+            assert ack_doc.is_no_data_available() is True
+            assert ack_doc.reason_code == "999"
 
             # Note: Not verifying HTTP client was called since client may fail before HTTP request
             # This will be properly tested in Phase 2 when client handles acknowledgements
@@ -262,26 +257,24 @@ class TestAcknowledgementDocumentIntegration:
             period_end = period_start + timedelta(days=1)
 
             # Make request - should handle error acknowledgement appropriately
-            try:
-                await client_with_mock.get_actual_total_load(
-                    bidding_zone=AreaCode.CZECH_REPUBLIC,
-                    period_start=period_start,
-                    period_end=period_end,
-                )
-                # This will currently raise an exception since the client hasn't been updated yet
-                pytest.fail(
-                    "Expected exception since client not yet updated for acknowledgements"
-                )
-            except EntsoEClientError:
-                # For now, verify that we can detect and parse the acknowledgement
-                xml_response = error_acknowledgement_xml
-                doc_type = XmlDocumentDetector.detect_document_type(xml_response)
-                assert doc_type == XmlDocumentType.ACKNOWLEDGEMENT_MARKET_DOCUMENT
+            result = await client_with_mock.get_actual_total_load(
+                bidding_zone=AreaCode.CZECH_REPUBLIC,
+                period_start=period_start,
+                period_end=period_end,
+            )
 
-                ack_doc = AcknowledgementMarketDocument.from_xml(xml_response)
-                assert ack_doc.is_error_acknowledgement() is True
-                assert ack_doc.reason_code == "401"
-                assert "Unauthorized access" in ack_doc.reason_text
+            # Phase 2 implementation: should return None for error acknowledgements too
+            assert result is None
+
+            # Verify that the error acknowledgement was properly detected and parsed
+            xml_response = error_acknowledgement_xml
+            doc_type = XmlDocumentDetector.detect_document_type(xml_response)
+            assert doc_type == XmlDocumentType.ACKNOWLEDGEMENT_MARKET_DOCUMENT
+
+            ack_doc = AcknowledgementMarketDocument.from_xml(xml_response)
+            assert ack_doc.is_error_acknowledgement() is True
+            assert ack_doc.reason_code == "401"
+            assert "Unauthorized access" in ack_doc.reason_text
 
             # Note: Not verifying HTTP client was called since client may fail before HTTP request
             # This will be properly tested in Phase 2 when client handles acknowledgements
@@ -361,21 +354,18 @@ class TestAcknowledgementDocumentIntegration:
                     assert isinstance(result, GlMarketDocument)
                     assert result.mRID == "sample-gl-document-id"
                 else:  # Acknowledgement response
-                    try:
-                        await client_with_mock.get_year_ahead_forecast_margin(
-                            bidding_zone=AreaCode.CZECH_REPUBLIC,
-                            period_start=period_start,
-                            period_end=period_end,
-                        )
-                        pytest.fail("Expected exception for acknowledgement")
-                    except EntsoEClientError:
-                        # Verify we can still detect and parse acknowledgement
-                        doc_type = XmlDocumentDetector.detect_document_type(
-                            xml_response
-                        )
-                        assert (
-                            doc_type == XmlDocumentType.ACKNOWLEDGEMENT_MARKET_DOCUMENT
-                        )
+                    result = await client_with_mock.get_year_ahead_forecast_margin(
+                        bidding_zone=AreaCode.CZECH_REPUBLIC,
+                        period_start=period_start,
+                        period_end=period_end,
+                    )
 
-                        ack_doc = AcknowledgementMarketDocument.from_xml(xml_response)
-                        assert ack_doc.is_no_data_available() is True
+                    # Phase 2 implementation: should return None for acknowledgements
+                    assert result is None
+
+                    # Verify we can still detect and parse acknowledgement
+                    doc_type = XmlDocumentDetector.detect_document_type(xml_response)
+                    assert doc_type == XmlDocumentType.ACKNOWLEDGEMENT_MARKET_DOCUMENT
+
+                    ack_doc = AcknowledgementMarketDocument.from_xml(xml_response)
+                    assert ack_doc.is_no_data_available() is True

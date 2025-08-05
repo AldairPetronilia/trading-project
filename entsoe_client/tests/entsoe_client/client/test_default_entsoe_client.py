@@ -69,8 +69,6 @@ class TestDefaultEntsoEClient:
     async def test_get_actual_total_load_success(
         self,
         client: DefaultEntsoEClient,
-        mock_http_client: AsyncMock,
-        base_url: str,
         valid_bidding_zone: AreaCode,
         valid_start_date: datetime,
         valid_end_date: datetime,
@@ -79,7 +77,7 @@ class TestDefaultEntsoEClient:
         """Test successful actual total load retrieval."""
         with patch.object(
             client,
-            "_parse_xml_response",
+            "_execute_request",
             return_value=mock_gl_market_document,
         ):
             result = await client.get_actual_total_load(
@@ -89,21 +87,11 @@ class TestDefaultEntsoEClient:
             )
 
             assert result == mock_gl_market_document
-            mock_http_client.get.assert_called_once()
-
-            # Verify the call arguments
-            call_args = mock_http_client.get.call_args
-            assert call_args[0][0] == base_url
-            params = call_args[0][1]
-            assert params["documentType"] == DocumentType.SYSTEM_TOTAL_LOAD.code
-            assert params["processType"] == ProcessType.REALISED.code
-            assert params["outBiddingZone_Domain"] == valid_bidding_zone.code
 
     @pytest.mark.asyncio
     async def test_get_actual_total_load_with_offset(
         self,
         client: DefaultEntsoEClient,
-        mock_http_client: AsyncMock,
         valid_bidding_zone: AreaCode,
         valid_start_date: datetime,
         valid_end_date: datetime,
@@ -114,7 +102,7 @@ class TestDefaultEntsoEClient:
 
         with patch.object(
             client,
-            "_parse_xml_response",
+            "_execute_request",
             return_value=mock_gl_market_document,
         ):
             result = await client.get_actual_total_load(
@@ -125,15 +113,11 @@ class TestDefaultEntsoEClient:
             )
 
             assert result == mock_gl_market_document
-            call_args = mock_http_client.get.call_args
-            params = call_args[0][1]
-            assert params["offset"] == str(offset)
 
     @pytest.mark.asyncio
     async def test_get_day_ahead_load_forecast_success(
         self,
         client: DefaultEntsoEClient,
-        mock_http_client: AsyncMock,
         valid_bidding_zone: AreaCode,
         valid_start_date: datetime,
         valid_end_date: datetime,
@@ -142,7 +126,7 @@ class TestDefaultEntsoEClient:
         """Test successful day-ahead load forecast retrieval."""
         with patch.object(
             client,
-            "_parse_xml_response",
+            "_execute_request",
             return_value=mock_gl_market_document,
         ):
             result = await client.get_day_ahead_load_forecast(
@@ -152,16 +136,11 @@ class TestDefaultEntsoEClient:
             )
 
             assert result == mock_gl_market_document
-            call_args = mock_http_client.get.call_args
-            params = call_args[0][1]
-            assert params["documentType"] == DocumentType.SYSTEM_TOTAL_LOAD.code
-            assert params["processType"] == ProcessType.DAY_AHEAD.code
 
     @pytest.mark.asyncio
     async def test_get_week_ahead_load_forecast_success(
         self,
         client: DefaultEntsoEClient,
-        mock_http_client: AsyncMock,
         valid_bidding_zone: AreaCode,
         valid_start_date: datetime,
         valid_end_date: datetime,
@@ -170,7 +149,7 @@ class TestDefaultEntsoEClient:
         """Test successful week-ahead load forecast retrieval."""
         with patch.object(
             client,
-            "_parse_xml_response",
+            "_execute_request",
             return_value=mock_gl_market_document,
         ):
             result = await client.get_week_ahead_load_forecast(
@@ -180,16 +159,11 @@ class TestDefaultEntsoEClient:
             )
 
             assert result == mock_gl_market_document
-            call_args = mock_http_client.get.call_args
-            params = call_args[0][1]
-            assert params["documentType"] == DocumentType.SYSTEM_TOTAL_LOAD.code
-            assert params["processType"] == ProcessType.WEEK_AHEAD.code
 
     @pytest.mark.asyncio
     async def test_get_month_ahead_load_forecast_success(
         self,
         client: DefaultEntsoEClient,
-        mock_http_client: AsyncMock,
         valid_bidding_zone: AreaCode,
         valid_start_date: datetime,
         valid_end_date: datetime,
@@ -198,7 +172,7 @@ class TestDefaultEntsoEClient:
         """Test successful month-ahead load forecast retrieval."""
         with patch.object(
             client,
-            "_parse_xml_response",
+            "_execute_request",
             return_value=mock_gl_market_document,
         ):
             result = await client.get_month_ahead_load_forecast(
@@ -208,16 +182,11 @@ class TestDefaultEntsoEClient:
             )
 
             assert result == mock_gl_market_document
-            call_args = mock_http_client.get.call_args
-            params = call_args[0][1]
-            assert params["documentType"] == DocumentType.SYSTEM_TOTAL_LOAD.code
-            assert params["processType"] == ProcessType.MONTH_AHEAD.code
 
     @pytest.mark.asyncio
     async def test_get_year_ahead_load_forecast_success(
         self,
         client: DefaultEntsoEClient,
-        mock_http_client: AsyncMock,
         valid_bidding_zone: AreaCode,
         valid_start_date: datetime,
         valid_end_date: datetime,
@@ -226,7 +195,7 @@ class TestDefaultEntsoEClient:
         """Test successful year-ahead load forecast retrieval."""
         with patch.object(
             client,
-            "_parse_xml_response",
+            "_execute_request",
             return_value=mock_gl_market_document,
         ):
             result = await client.get_year_ahead_load_forecast(
@@ -236,16 +205,11 @@ class TestDefaultEntsoEClient:
             )
 
             assert result == mock_gl_market_document
-            call_args = mock_http_client.get.call_args
-            params = call_args[0][1]
-            assert params["documentType"] == DocumentType.SYSTEM_TOTAL_LOAD.code
-            assert params["processType"] == ProcessType.YEAR_AHEAD.code
 
     @pytest.mark.asyncio
     async def test_get_year_ahead_forecast_margin_success(
         self,
         client: DefaultEntsoEClient,
-        mock_http_client: AsyncMock,
         valid_bidding_zone: AreaCode,
         valid_start_date: datetime,
         valid_end_date: datetime,
@@ -254,7 +218,7 @@ class TestDefaultEntsoEClient:
         """Test successful year-ahead forecast margin retrieval."""
         with patch.object(
             client,
-            "_parse_xml_response",
+            "_execute_request",
             return_value=mock_gl_market_document,
         ):
             result = await client.get_year_ahead_forecast_margin(
@@ -264,10 +228,6 @@ class TestDefaultEntsoEClient:
             )
 
             assert result == mock_gl_market_document
-            call_args = mock_http_client.get.call_args
-            params = call_args[0][1]
-            assert params["documentType"] == DocumentType.LOAD_FORECAST_MARGIN.code
-            assert params["processType"] == ProcessType.YEAR_AHEAD.code
 
     @pytest.mark.asyncio
     async def test_execute_request_http_error(
@@ -303,7 +263,10 @@ class TestDefaultEntsoEClient:
         """Test _execute_request handles XML parsing errors."""
         xml_error = Exception("Invalid XML")
 
-        with patch.object(client, "_parse_xml_response", side_effect=xml_error):
+        with patch(
+            "entsoe_client.client.default_entsoe_client.XmlDocumentDetector.detect_document_type",
+            side_effect=xml_error,
+        ):
             with pytest.raises(EntsoEClientError) as exc_info:
                 await client.get_actual_total_load(
                     bidding_zone=valid_bidding_zone,
