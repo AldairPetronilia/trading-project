@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from typing import cast
 
 from pydantic import HttpUrl
 
@@ -209,11 +210,9 @@ class DefaultEntsoEClient(EntsoEClient):
             self._ensure_http_client()
 
             query_params = request.to_parameter_map()
-            # Type assertion safe after _ensure_http_client()
-            assert self.http_client is not None  # noqa: S101
-            xml_response = await self.http_client.get(
-                HttpUrl(self.base_url), query_params
-            )
+            # After _ensure_http_client(), http_client is guaranteed to be non-None
+            http_client = cast("HttpClient", self.http_client)
+            xml_response = await http_client.get(HttpUrl(self.base_url), query_params)
 
             # Detect document type before parsing
             document_type = XmlDocumentDetector.detect_document_type(xml_response)
