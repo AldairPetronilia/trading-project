@@ -71,6 +71,33 @@ class TestEntsoeCollector:
         assert result == mock_gl_market_document
 
     @pytest.mark.asyncio
+    async def test_get_actual_total_load_returns_none_when_no_data(
+        self,
+        entsoe_collector: EntsoeCollector,
+        mock_entsoe_client: AsyncMock,
+        sample_bidding_zone: AreaCode,
+        sample_period_start: datetime,
+        sample_period_end: datetime,
+    ) -> None:
+        """Test that get_actual_total_load returns None when client returns None (no data)."""
+        mock_entsoe_client.get_actual_total_load.return_value = None
+
+        result = await entsoe_collector.get_actual_total_load(
+            bidding_zone=sample_bidding_zone,
+            period_start=sample_period_start,
+            period_end=sample_period_end,
+            offset=None,
+        )
+
+        mock_entsoe_client.get_actual_total_load.assert_called_once_with(
+            bidding_zone=sample_bidding_zone,
+            period_start=sample_period_start,
+            period_end=sample_period_end,
+            offset=None,
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
     async def test_get_actual_total_load_with_offset(
         self,
         entsoe_collector: EntsoeCollector,

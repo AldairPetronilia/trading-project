@@ -18,7 +18,7 @@ class EntsoEClient(Protocol):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve actual total load data [6.1.A].
         Returns real-time load consumption data for a specified bidding zone and time period.
@@ -44,7 +44,7 @@ class EntsoEClient(Protocol):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve day-ahead total load forecast [6.1.B].
         Returns load forecasts published one day ahead for planning purposes.
@@ -70,7 +70,7 @@ class EntsoEClient(Protocol):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve week-ahead total load forecast [6.1.C].
         Returns load forecasts published one week ahead for medium-term planning.
@@ -96,7 +96,7 @@ class EntsoEClient(Protocol):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve month-ahead total load forecast [6.1.D].
         Returns load forecasts published one month ahead for long-term planning.
@@ -122,7 +122,7 @@ class EntsoEClient(Protocol):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve year-ahead total load forecast [6.1.E].
         Returns load forecasts published one year ahead for strategic planning.
@@ -148,7 +148,7 @@ class EntsoEClient(Protocol):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve year-ahead forecast margin [8.1].
         Returns forecast margin data indicating the uncertainty/confidence level

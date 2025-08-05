@@ -1,5 +1,3 @@
-from dependency_injector import containers, providers
-
 from app.collectors.entsoe_collector import EntsoeCollector
 from app.config.database import Database
 from app.config.settings import BackfillConfig, Settings
@@ -9,6 +7,8 @@ from app.repositories.energy_data_repository import EnergyDataRepository
 from app.services.backfill_service import BackfillService
 from app.services.entsoe_data_service import EntsoEDataService
 from app.services.scheduler_service import SchedulerService
+from dependency_injector import containers, providers
+
 from entsoe_client.client.entsoe_client import EntsoEClient
 from entsoe_client.client.entsoe_client_factory import EntsoEClientFactory
 

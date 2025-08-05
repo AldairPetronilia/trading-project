@@ -29,7 +29,7 @@ class EntsoeCollector:
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve actual total load data [6.1.A].
 
@@ -58,7 +58,7 @@ class EntsoeCollector:
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve day-ahead total load forecast [6.1.B].
 
@@ -87,7 +87,7 @@ class EntsoeCollector:
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve week-ahead total load forecast [6.1.C].
 
@@ -116,7 +116,7 @@ class EntsoeCollector:
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve month-ahead total load forecast [6.1.D].
 
@@ -145,7 +145,7 @@ class EntsoeCollector:
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve year-ahead total load forecast [6.1.E].
 
@@ -174,7 +174,7 @@ class EntsoeCollector:
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         """
         Retrieve year-ahead forecast margin [8.1].
 

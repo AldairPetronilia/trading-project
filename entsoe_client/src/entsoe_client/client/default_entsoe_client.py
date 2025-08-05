@@ -1,11 +1,21 @@
 import logging
 from datetime import datetime
+from typing import cast
+
+from pydantic import HttpUrl
 
 from entsoe_client.api.load_domain_request_builder import LoadDomainRequestBuilder
 from entsoe_client.client.entsoe_client import EntsoEClient
 from entsoe_client.client.entsoe_client_error import EntsoEClientError
+from entsoe_client.client.xml_document_detector import (
+    XmlDocumentDetector,
+    XmlDocumentType,
+)
 from entsoe_client.http_client.exceptions import HttpClientError
 from entsoe_client.http_client.http_client import HttpClient
+from entsoe_client.model.acknowledgement.acknowledgement_market_document import (
+    AcknowledgementMarketDocument,
+)
 from entsoe_client.model.common.area_code import AreaCode
 from entsoe_client.model.common.entsoe_api_request import EntsoEApiRequest
 from entsoe_client.model.load.gl_market_document import GlMarketDocument
@@ -19,7 +29,7 @@ class DefaultEntsoEClient(EntsoEClient):
     Provides HTTP-based access to load data and forecasts with XML response parsing.
     """
 
-    def __init__(self, http_client: HttpClient, base_url: str) -> None:
+    def __init__(self, http_client: HttpClient | None, base_url: str) -> None:
         """
         Create a new DefaultEntsoEClient.
 
@@ -36,7 +46,7 @@ class DefaultEntsoEClient(EntsoEClient):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         logger.debug(
             "Fetching actual total load for zone: %s, period: %s to %s, offset: %s",
             bidding_zone.code,
@@ -61,7 +71,7 @@ class DefaultEntsoEClient(EntsoEClient):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         logger.debug(
             "Fetching day-ahead load forecast for zone: %s, period: %s to %s, offset: %s",
             bidding_zone.code,
@@ -86,7 +96,7 @@ class DefaultEntsoEClient(EntsoEClient):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         logger.debug(
             "Fetching week-ahead load forecast for zone: %s, period: %s to %s, offset: %s",
             bidding_zone.code,
@@ -111,7 +121,7 @@ class DefaultEntsoEClient(EntsoEClient):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         logger.debug(
             "Fetching month-ahead load forecast for zone: %s, period: %s to %s, offset: %s",
             bidding_zone.code,
@@ -136,7 +146,7 @@ class DefaultEntsoEClient(EntsoEClient):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         logger.debug(
             "Fetching year-ahead load forecast for zone: %s, period: %s to %s, offset: %s",
             bidding_zone.code,
@@ -161,7 +171,7 @@ class DefaultEntsoEClient(EntsoEClient):
         period_start: datetime,
         period_end: datetime,
         offset: int | None = None,
-    ) -> GlMarketDocument:
+    ) -> GlMarketDocument | None:
         logger.debug(
             "Fetching year-ahead forecast margin for zone: %s, period: %s to %s, offset: %s",
             bidding_zone.code,
@@ -180,31 +190,53 @@ class DefaultEntsoEClient(EntsoEClient):
         request = request_builder.build_year_ahead_forecast_margin()
         return await self._execute_request(request)
 
-    async def _execute_request(self, request: EntsoEApiRequest) -> GlMarketDocument:
+    async def _execute_request(
+        self, request: EntsoEApiRequest
+    ) -> GlMarketDocument | None:
         """
         Common method to execute any API request and parse the XML response.
+        Enhanced with document type detection for graceful acknowledgement handling.
 
         Args:
             request: The API request to execute
 
         Returns:
-            Parsed market document
+            Parsed market document, or None if no data is available (acknowledgement with reason code 999)
 
         Raises:
             EntsoEClientException: If the request fails or response cannot be parsed
         """
         try:
-            query_params = request.to_parameter_map()
-            xml_response = await self.http_client.get(self.base_url, query_params)
+            self._ensure_http_client()
 
-            logger.debug("Received XML response, parsing...")
-            return self._parse_xml_response(xml_response)
+            query_params = request.to_parameter_map()
+            # After _ensure_http_client(), http_client is guaranteed to be non-None
+            http_client = cast("HttpClient", self.http_client)
+            xml_response = await http_client.get(HttpUrl(self.base_url), query_params)
+
+            # Detect document type before parsing
+            document_type = XmlDocumentDetector.detect_document_type(xml_response)
+
+            if document_type == XmlDocumentType.ACKNOWLEDGEMENT_MARKET_DOCUMENT:
+                ack_doc = AcknowledgementMarketDocument.from_xml(xml_response)
+                if ack_doc.is_no_data_available():
+                    logger.info(
+                        "No data available for request: %s", ack_doc.reason_text
+                    )
+                    return None  # Graceful no-data return
+                logger.warning(
+                    "Received acknowledgement with reason: %s", ack_doc.reason_text
+                )
+                return None
+
+            logger.debug("Received GL_MarketDocument, parsing...")
+            return GlMarketDocument.from_xml(xml_response)
 
         except HttpClientError as e:
             logger.exception("HTTP request failed for request: %s", request)
             raise EntsoEClientError.http_request_failed(e) from e
         except Exception as e:
-            logger.exception("XML parsing failed")
+            logger.exception("Document parsing failed")
             raise EntsoEClientError.xml_parsing_failed(e) from e
 
     def _parse_xml_response(self, xml_content: str) -> GlMarketDocument:
@@ -227,3 +259,9 @@ class DefaultEntsoEClient(EntsoEClient):
         if self.http_client:
             await self.http_client.close()
             logger.debug("EntsoE client closed")
+
+    def _ensure_http_client(self) -> None:
+        """Ensure HTTP client is initialized."""
+        if self.http_client is None:
+            msg = "HTTP client not initialized"
+            raise EntsoEClientError(msg)

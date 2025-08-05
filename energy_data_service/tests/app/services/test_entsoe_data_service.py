@@ -1,7 +1,7 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from app.exceptions.collector_exceptions import CollectorError
@@ -468,7 +468,6 @@ class TestEntsoEDataService:
                         status_code=429,
                         responnse_body="Rate limit exceeded",
                     )
-                    http_error.headers = {"Retry-After": "60"}
                     exc = EntsoEClientError(
                         "HTTP 429 Too Many Requests", cause=http_error
                     )
@@ -630,9 +629,55 @@ class TestEntsoEDataService:
         )
 
         assert result.stored_count == 0
+        # NEW: Test the no-data tracking fields
+        assert result.no_data_available is True
+        assert result.no_data_reason == "1/1 chunks returned no data"
         # Processor and repository should not be called if there's no raw document
         assert mock_processor.process.call_count == 0
         assert mock_repository.upsert_batch.call_count == 0
+
+    async def test_collect_with_chunking_mixed_data_scenarios(
+        self,
+        entsoe_data_service: EntsoEDataService,
+        mock_collector: AsyncMock,
+        mock_processor: AsyncMock,
+        mock_repository: AsyncMock,
+    ) -> None:
+        """
+        Test collect_with_chunking when some chunks return data and others return None.
+        """
+        start_time = datetime(2024, 1, 1, tzinfo=UTC)
+        end_time = start_time + timedelta(days=6)  # 6 days = 2 chunks (3 days each)
+        endpoint_name = EndpointNames.ACTUAL_LOAD
+
+        # Mock GL market document for successful chunks
+        mock_gl_doc = Mock()
+        mock_gl_doc.timeSeries = [Mock()]
+        mock_gl_doc.timeSeries[0].period = Mock()
+        mock_gl_doc.timeSeries[0].period.points = [Mock(), Mock()]
+
+        # First chunk returns data, second chunk returns None
+        mock_collector.get_actual_total_load.side_effect = [mock_gl_doc, None]
+
+        # Mock processor to return some data points
+        mock_data_points = [Mock(), Mock()]
+        mock_processor.process.return_value = mock_data_points
+
+        # Mock repository to return stored models
+        mock_repository.upsert_batch.return_value = mock_data_points
+
+        result = await entsoe_data_service.collect_with_chunking(
+            AreaCode.GERMANY, endpoint_name, start_time, end_time
+        )
+
+        # Verify mixed results are tracked correctly
+        assert result.stored_count == 2  # Only from the first chunk
+        assert result.no_data_available is True  # Because some chunks had no data
+        assert result.no_data_reason == "1/2 chunks returned no data"
+
+        # Verify processor and repository were called only once (for the chunk with data)
+        assert mock_processor.process.call_count == 1
+        assert mock_repository.upsert_batch.call_count == 1
 
     async def test_collect_with_chunking_entsoe_client_exception(
         self,

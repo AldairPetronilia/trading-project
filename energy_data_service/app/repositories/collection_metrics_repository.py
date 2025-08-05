@@ -9,14 +9,13 @@ and operational health across different energy areas and data types.
 from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
 
-from sqlalchemy import and_, desc, func, select
-from sqlalchemy.exc import SQLAlchemyError
-
 from app.config.database import Database
 from app.exceptions.repository_exceptions import DataAccessError
 from app.models.collection_metrics import CollectionMetrics
 from app.models.load_data import EnergyDataType
 from app.repositories.base_repository import BaseRepository
+from sqlalchemy import and_, desc, func, select
+from sqlalchemy.exc import SQLAlchemyError
 
 
 class CollectionMetricsRepository(BaseRepository[CollectionMetrics]):
