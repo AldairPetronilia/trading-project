@@ -32,3 +32,15 @@ class EntsoEApiRequestError(Exception):
     @classmethod
     def required_field_missing(cls, field_name: str) -> "EntsoEApiRequestError":
         return cls(f"{field_name} is required")
+
+    @classmethod
+    def invalid_xml_content(cls, reason: str) -> "EntsoEApiRequestError":
+        return cls(f"Invalid XML content: {reason}")
+
+    @classmethod
+    def unsupported_document_type(cls, document_type: str) -> "EntsoEApiRequestError":
+        return cls(f"Unsupported XML document type: {document_type}")
+
+    @classmethod
+    def document_type_detection_failed(cls, reason: str) -> "EntsoEApiRequestError":
+        return cls(f"Failed to detect XML document type: {reason}")
