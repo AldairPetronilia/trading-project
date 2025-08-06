@@ -25,3 +25,8 @@ members = [
     "entsoe_client",
     "energy_data_service",
 ]
+
+[tool.mypy]
+mypy_path = "energy_data_service:entsoe_client/src"
+namespace_packages = true
+explicit_package_bases = true
