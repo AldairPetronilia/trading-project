@@ -128,6 +128,10 @@ class HttpxClient(HttpClient):
             logger.exception("HTTP status error")
             msg = "HTTP status error"
             raise HttpClientError(msg) from e
+        except httpx.RemoteProtocolError as e:
+            logger.exception("Server disconnected unexpectedly")
+            msg = "Server disconnected without sending a response"
+            raise HttpClientConnectionError(msg) from e
         except httpx.RequestError as e:
             logger.exception("Request error")
             msg = "Request failed"
