@@ -10,7 +10,7 @@ from app.exceptions.repository_exceptions import (
     DuplicateDataError,
     RepositoryError,
 )
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -314,3 +314,23 @@ class BaseRepository[ModelType](ABC):
             String representation of the model type
         """
         return "Model"
+
+    async def test_connection(self) -> None:
+        """Test database connection for health checks.
+
+        Performs a simple database query to verify connectivity.
+
+        Raises:
+            DataAccessError: If database connection fails
+        """
+        async with self.database.session_factory() as session:
+            try:
+                await session.execute(text("SELECT 1"))
+            except SQLAlchemyError as e:
+                model_name = self._get_model_name()
+                error_msg = f"Database connection test failed for {model_name}"
+                raise DataAccessError(
+                    error_msg,
+                    model_type=model_name,
+                    operation="test_connection",
+                ) from e
