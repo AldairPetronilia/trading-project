@@ -43,9 +43,9 @@ class TestHttpxClient:
         )
 
     @pytest.fixture
-    def mock_retry_handler(self) -> RetryHandler:
+    def mock_retry_handler(self) -> AsyncMock:
         """Create a mock retry handler."""
-        handler = MagicMock(spec=RetryHandler)
+        handler = AsyncMock(spec=RetryHandler)
 
         async def execute_mock(func: Callable[[], Awaitable[Any]]) -> Any:
             return await func()
@@ -57,7 +57,7 @@ class TestHttpxClient:
     def httpx_client(
         self,
         mock_config: EntsoEClientConfig,
-        mock_retry_handler: RetryHandler,
+        mock_retry_handler: AsyncMock,
     ) -> HttpxClient:
         """Create an HttpxClient instance for testing."""
         return HttpxClient(mock_config, mock_retry_handler)
@@ -126,7 +126,7 @@ class TestHttpxClient:
     async def test_get_success(
         self,
         httpx_client: HttpxClient,
-        mock_retry_handler: RetryHandler,
+        mock_retry_handler: AsyncMock,
     ) -> None:
         """Test successful GET request."""
         mock_response = MagicMock()
@@ -204,7 +204,7 @@ class TestHttpxClient:
     async def test_get_retryable_error(
         self,
         httpx_client: HttpxClient,
-        mock_retry_handler: RetryHandler,
+        mock_retry_handler: AsyncMock,
     ) -> None:
         """Test that retryable HTTP errors are handled correctly."""
         mock_response = MagicMock()
@@ -233,7 +233,7 @@ class TestHttpxClient:
     async def test_get_non_retryable_error(
         self,
         httpx_client: HttpxClient,
-        mock_retry_handler: RetryHandler,
+        mock_retry_handler: AsyncMock,
     ) -> None:
         """Test that non-retryable HTTP errors are handled correctly."""
         mock_response = MagicMock()
@@ -261,7 +261,7 @@ class TestHttpxClient:
     async def test_get_timeout_error(
         self,
         httpx_client: HttpxClient,
-        mock_retry_handler: RetryHandler,
+        mock_retry_handler: AsyncMock,
     ) -> None:
         """Test that timeout errors are handled correctly."""
         mock_client = AsyncMock()
@@ -284,7 +284,7 @@ class TestHttpxClient:
     async def test_get_connection_error(
         self,
         httpx_client: HttpxClient,
-        mock_retry_handler: RetryHandler,
+        mock_retry_handler: AsyncMock,
     ) -> None:
         """Test that connection errors are handled correctly."""
         mock_client = AsyncMock()
@@ -304,10 +304,37 @@ class TestHttpxClient:
             assert "Connection failed" in str(exc_info.value)
 
     @pytest.mark.asyncio
+    async def test_get_remote_protocol_error(
+        self,
+        httpx_client: HttpxClient,
+        mock_retry_handler: AsyncMock,
+    ) -> None:
+        """Test that RemoteProtocolError is handled correctly."""
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = httpx.RemoteProtocolError(
+            "Server disconnected without sending a response."
+        )
+
+        with patch.object(httpx_client, "_ensure_client", new_callable=AsyncMock):
+            httpx_client._client = mock_client
+
+            async def execute_mock(func: Callable[[], Awaitable[Any]]) -> Any:
+                return await func()
+
+            mock_retry_handler.execute.side_effect = execute_mock
+
+            with pytest.raises(HttpClientConnectionError) as exc_info:
+                await httpx_client.get(HttpUrl("https://api.example.com/data"))
+
+            assert "Server disconnected without sending a response" in str(
+                exc_info.value
+            )
+
+    @pytest.mark.asyncio
     async def test_get_client_not_initialized(
         self,
         httpx_client: HttpxClient,
-        mock_retry_handler: RetryHandler,
+        mock_retry_handler: AsyncMock,
     ) -> None:
         """Test that error is raised when client is not initialized during request execution."""
         # Mock _ensure_client to not set the client
@@ -427,7 +454,7 @@ class TestHttpxClient:
     async def test_execute_request_http_status_error(
         self,
         httpx_client: HttpxClient,
-        mock_retry_handler: RetryHandler,
+        mock_retry_handler: AsyncMock,
     ) -> None:
         """Test handling of httpx.HTTPStatusError."""
         mock_client = AsyncMock()
@@ -454,7 +481,7 @@ class TestHttpxClient:
     async def test_execute_request_generic_request_error(
         self,
         httpx_client: HttpxClient,
-        mock_retry_handler: RetryHandler,
+        mock_retry_handler: AsyncMock,
     ) -> None:
         """Test handling of generic httpx.RequestError."""
         mock_client = AsyncMock()
