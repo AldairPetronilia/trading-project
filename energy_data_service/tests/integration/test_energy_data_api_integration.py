@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytest
 import pytest_asyncio
 from app.api.app import create_app
+from app.config.database import Database
 from app.config.settings import DatabaseConfig, EntsoEClientConfig, Settings
 from app.container import Container
 from app.models.load_data import EnergyDataPoint
@@ -19,8 +20,9 @@ from testcontainers.postgres import PostgresContainer
 
 @pytest.fixture
 def postgres_container() -> Generator[PostgresContainer]:
-    """Fixture that provides a PostgreSQL testcontainer."""
-    with PostgresContainer("postgres:16") as postgres:
+    """Fixture that provides a TimescaleDB testcontainer."""
+    # Use timescale/timescaledb image for TimescaleDB support
+    with PostgresContainer("timescale/timescaledb:2.16.1-pg16") as postgres:
         yield postgres
 
 
@@ -47,45 +49,77 @@ def settings(database_config: DatabaseConfig) -> Settings:
 
 
 @pytest.fixture
-def container(settings: Settings) -> Generator[Container]:
-    """Create a test container with test database."""
+def container(settings: Settings) -> Container:
+    """Create dependency injection container with test settings."""
     container = Container()
     container.config.override(settings)
-    container.init_resources()
+    return container
 
-    # Create tables
+
+@pytest_asyncio.fixture
+async def initialized_database(container: Container) -> AsyncGenerator[Database]:
+    """Initialize database with TimescaleDB extension and tables."""
     from app.config.database import Database
+    from app.models.base import Base
+    from sqlalchemy import text
 
     database = container.database()
-    database.create_all_tables()
 
-    yield container
-    container.shutdown_resources()
+    # Initialize database with TimescaleDB extension and tables
+    async with database.engine.begin() as conn:
+        # Enable TimescaleDB extension
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"))
+
+        # Create all tables
+        await conn.run_sync(Base.metadata.create_all)
+
+    yield database
+
+    # Cleanup
+    async with database.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
 
 
 class TestEnergyDataAPIIntegration:
     """Integration tests for energy data API with real database."""
 
     @pytest_asyncio.fixture
-    async def app_client(self, container: Container) -> AsyncGenerator[AsyncClient]:
+    async def app_client(
+        self,
+        container: Container,
+        initialized_database: Database,  # noqa: ARG002
+    ) -> AsyncGenerator[AsyncClient]:
         """Create test client with real app and database."""
         app = create_app()
-        app.container = container
+        app.state.container = container
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        # Ensure container resources are initialized
+        container.init_resources()
+
+        from httpx import ASGITransport
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
             yield client
 
     @pytest_asyncio.fixture
-    async def sample_data(self, container: Container) -> list[EnergyDataPoint]:
+    async def sample_data(
+        self,
+        container: Container,
+        initialized_database: Database,  # noqa: ARG002
+    ) -> list[EnergyDataPoint]:
         """Create sample energy data in the database."""
-        db_session_factory = container.db_session_factory()
-        async with db_session_factory() as session:
+        database = container.database()
+        async with database.session_factory() as session:
             data_points = []
             base_time = datetime(2024, 1, 1, tzinfo=UTC)
 
             # Create data for multiple areas and types
+            from app.models.load_data import EnergyDataType
+
             areas = ["DE", "FR", "NL"]
-            data_types = ["A75", "A74"]
+            data_types = [EnergyDataType.ACTUAL, EnergyDataType.DAY_AHEAD]
             business_types = ["A01", "A02"]
 
             for area in areas:
@@ -123,12 +157,16 @@ class TestEnergyDataAPIIntegration:
         sample_data: list[EnergyDataPoint],  # noqa: ARG002
     ) -> None:
         """Test basic energy data retrieval."""
+        # First test health endpoint to ensure API is working
+        health_response = await app_client.get("/api/v1/health/")
+        assert health_response.status_code == 200
+
+        # Test our Phase 2B latest endpoint
         response = await app_client.get(
-            "/api/v1/energy-data/",
+            "/api/v1/energy-data/latest",
             params={
                 "area_code": "DE",
-                "start_time": "2024-01-01T00:00:00Z",
-                "end_time": "2024-01-01T12:00:00Z",
+                "limit": 10,
             },
         )
 
@@ -142,7 +180,7 @@ class TestEnergyDataAPIIntegration:
         # Verify timestamp range
         timestamps = [datetime.fromisoformat(item["timestamp"]) for item in data]
         assert min(timestamps) >= datetime(2024, 1, 1, tzinfo=UTC)
-        assert max(timestamps) <= datetime(2024, 1, 1, 12, tzinfo=UTC)
+        assert max(timestamps) <= datetime(2024, 1, 1, 23, tzinfo=UTC)
 
     async def test_get_energy_data_with_filters(
         self,
@@ -156,7 +194,7 @@ class TestEnergyDataAPIIntegration:
                 "area_code": "FR",
                 "start_time": "2024-01-01T00:00:00Z",
                 "end_time": "2024-01-01T06:00:00Z",
-                "data_type": "A75",
+                "data_type": "actual",
                 "business_type": "A01",
             },
         )
@@ -166,7 +204,7 @@ class TestEnergyDataAPIIntegration:
 
         # Verify all results match filters
         assert all(item["area_code"] == "FR" for item in data)
-        assert all(item["data_type"] == "A75" for item in data)
+        assert all(item["data_type"] == "actual" for item in data)
         assert all(item["business_type"] == "A01" for item in data)
 
     async def test_get_energy_data_with_limit(

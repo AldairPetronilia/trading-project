@@ -1,7 +1,7 @@
 """Unit tests for energy data API endpoints."""
 
 from collections.abc import AsyncGenerator
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
@@ -242,3 +242,309 @@ class TestEnergyDataEndpoints:
 
         assert exc_info.value.status_code == 500
         assert "unexpected error occurred" in exc_info.value.detail
+
+    async def test_get_latest_energy_data_success(
+        self, mock_repository: AsyncMock
+    ) -> None:
+        """Test successful retrieval of latest energy data."""
+        from app.api.v1.endpoints.energy_data import get_latest_energy_data
+
+        mock_point = Mock(spec=EnergyDataPoint)
+        mock_point.area_code = "DE"
+        mock_point.quantity = Decimal("123.45")
+        mock_point.data_type = "A75"
+        mock_point.business_type = "A01"
+        mock_point.unit = "MW"
+        mock_point.data_source = "ENTSOE"
+        mock_point.resolution = "PT15M"
+        mock_point.timestamp = datetime.now(UTC)
+        mock_point.curve_type = "A01"
+        mock_point.document_mrid = "doc-1"
+        mock_point.revision_number = 1
+
+        mock_repository.get_latest_by_area.return_value = [mock_point]
+
+        result = await get_latest_energy_data(
+            area_code="DE",
+            data_type=None,
+            business_type=None,
+            limit=100,
+            repository=mock_repository,
+        )
+
+        assert len(result) == 1
+        assert result[0].area_code == "DE"
+        assert result[0].quantity == Decimal("123.45")
+
+        mock_repository.get_latest_by_area.assert_called_once_with(
+            area_code="DE",
+            limit=100,
+        )
+
+    async def test_get_latest_energy_data_with_filters(
+        self, mock_repository: AsyncMock
+    ) -> None:
+        """Test latest energy data endpoint with filtering."""
+        from app.api.v1.endpoints.energy_data import get_latest_energy_data
+
+        # Create multiple test data points
+        test_data = []
+        for i, data_type in enumerate(["TYPE_A", "TYPE_B"]):
+            mock_point = Mock(spec=EnergyDataPoint)
+            mock_point.area_code = "DE"
+            mock_point.timestamp = datetime.now(UTC) - timedelta(minutes=15 * i)
+            mock_point.quantity = Decimal(f"{100 + i * 100}.0")
+            mock_point.data_type = data_type
+            mock_point.business_type = "BUS_A"
+            mock_point.unit = "MW"
+            mock_point.data_source = "ENTSOE"
+            mock_point.resolution = "PT15M"
+            mock_point.curve_type = "A01"
+            mock_point.document_mrid = f"doc-{i}"
+            mock_point.revision_number = 1
+            test_data.append(mock_point)
+
+        mock_repository.get_latest_by_area.return_value = test_data
+
+        result = await get_latest_energy_data(
+            area_code="DE",
+            data_type="TYPE_A",
+            business_type=None,
+            limit=50,
+            repository=mock_repository,
+        )
+
+        # Should filter to only TYPE_A
+        assert len(result) == 1
+        assert result[0].data_type == "TYPE_A"
+
+    async def test_get_latest_energy_data_area_code_normalization(
+        self, mock_repository: AsyncMock
+    ) -> None:
+        """Test area code normalization in latest endpoint."""
+        from app.api.v1.endpoints.energy_data import get_latest_energy_data
+
+        mock_point = Mock(spec=EnergyDataPoint)
+        mock_point.area_code = "DE"
+        mock_point.quantity = Decimal("123.45")
+        mock_point.data_type = "A75"
+        mock_point.business_type = "A01"
+        mock_point.unit = "MW"
+        mock_point.data_source = "ENTSOE"
+        mock_point.resolution = "PT15M"
+        mock_point.timestamp = datetime.now(UTC)
+        mock_point.curve_type = "A01"
+        mock_point.document_mrid = "doc-1"
+        mock_point.revision_number = 1
+
+        mock_repository.get_latest_by_area.return_value = [mock_point]
+
+        await get_latest_energy_data(
+            area_code="de",
+            data_type=None,
+            business_type=None,
+            limit=100,
+            repository=mock_repository,
+        )
+
+        mock_repository.get_latest_by_area.assert_called_once_with(
+            area_code="DE",
+            limit=100,
+        )
+
+    async def test_get_latest_energy_data_repository_error(
+        self, mock_repository: AsyncMock
+    ) -> None:
+        """Test latest endpoint with repository error."""
+        from app.api.v1.endpoints.energy_data import get_latest_energy_data
+
+        mock_repository.get_latest_by_area.side_effect = RepositoryError(
+            "Database connection failed",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_latest_energy_data(
+                area_code="DE",
+                data_type=None,
+                business_type=None,
+                limit=100,
+                repository=mock_repository,
+            )
+
+        assert exc_info.value.status_code == 500
+        assert "Database error" in exc_info.value.detail
+
+    async def test_get_latest_energy_data_empty_result(
+        self, mock_repository: AsyncMock
+    ) -> None:
+        """Test latest endpoint with no data."""
+        from app.api.v1.endpoints.energy_data import get_latest_energy_data
+
+        mock_repository.get_latest_by_area.return_value = []
+
+        result = await get_latest_energy_data(
+            area_code="DE",
+            data_type=None,
+            business_type=None,
+            limit=100,
+            repository=mock_repository,
+        )
+
+        assert result == []
+
+    async def test_get_aggregated_energy_data_success(
+        self, mock_repository: AsyncMock
+    ) -> None:
+        """Test successful aggregated energy data retrieval."""
+        from app.api.v1.endpoints.energy_data import get_aggregated_energy_data
+
+        # Create test data for aggregation
+        test_data = []
+        for i in range(2):
+            mock_point = Mock(spec=EnergyDataPoint)
+            mock_point.area_code = "DE"
+            mock_point.timestamp = datetime(2024, 1, 1, 10, i * 15, tzinfo=UTC)
+            mock_point.quantity = Decimal(f"{100 + i * 100}.0")
+            mock_point.data_type = "A75"
+            mock_point.business_type = "A01"
+            mock_point.unit = "MW"
+            mock_point.data_source = "ENTSOE"
+            mock_point.resolution = "PT15M"
+            mock_point.curve_type = "A01"
+            mock_point.document_mrid = f"doc-{i}"
+            mock_point.revision_number = 1
+            test_data.append(mock_point)
+
+        mock_repository.get_by_time_range.return_value = test_data
+
+        result = await get_aggregated_energy_data(
+            area_code="DE",
+            start_time=datetime(2024, 1, 1, tzinfo=UTC),
+            end_time=datetime(2024, 1, 2, tzinfo=UTC),
+            aggregation="hourly",
+            data_type=None,
+            business_type=None,
+            limit=1000,
+            repository=mock_repository,
+        )
+
+        assert len(result) == 1  # Should aggregate into one hourly data point
+        assert result[0].area_code == "DE"
+        assert result[0].resolution == "AGG_HOURLY"
+
+    async def test_get_aggregated_energy_data_with_filters(
+        self, mock_repository: AsyncMock
+    ) -> None:
+        """Test aggregated endpoint with type filters."""
+        from app.api.v1.endpoints.energy_data import get_aggregated_energy_data
+
+        test_data = []
+        for i, data_type in enumerate(["TYPE_A", "TYPE_B"]):
+            mock_point = Mock(spec=EnergyDataPoint)
+            mock_point.area_code = "DE"
+            mock_point.timestamp = datetime(2024, 1, 1, 10, 0, tzinfo=UTC)
+            mock_point.quantity = Decimal(f"{100 + i * 100}.0")
+            mock_point.data_type = data_type
+            mock_point.business_type = "BUS_A"
+            mock_point.unit = "MW"
+            mock_point.data_source = "ENTSOE"
+            mock_point.resolution = "PT15M"
+            mock_point.curve_type = "A01"
+            mock_point.document_mrid = f"doc-{i}"
+            mock_point.revision_number = 1
+            test_data.append(mock_point)
+
+        mock_repository.get_by_time_range.return_value = test_data
+
+        result = await get_aggregated_energy_data(
+            area_code="DE",
+            start_time=datetime(2024, 1, 1, tzinfo=UTC),
+            end_time=datetime(2024, 1, 2, tzinfo=UTC),
+            aggregation="daily",
+            data_type="TYPE_A",
+            business_type=None,
+            limit=1000,
+            repository=mock_repository,
+        )
+
+        assert len(result) == 1
+        assert result[0].data_type == "TYPE_A"
+
+    async def test_get_aggregated_energy_data_invalid_time_range(
+        self, mock_repository: AsyncMock
+    ) -> None:
+        """Test aggregated endpoint with invalid time range."""
+        from app.api.v1.endpoints.energy_data import get_aggregated_energy_data
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_aggregated_energy_data(
+                area_code="DE",
+                start_time=datetime(2024, 1, 2, tzinfo=UTC),
+                end_time=datetime(2024, 1, 1, tzinfo=UTC),  # Before start
+                aggregation="daily",
+                data_type=None,
+                business_type=None,
+                limit=1000,
+                repository=mock_repository,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "end_time must be after start_time" in exc_info.value.detail
+
+    async def test_get_aggregated_energy_data_repository_error(
+        self, mock_repository: AsyncMock
+    ) -> None:
+        """Test aggregated endpoint with repository error."""
+        from app.api.v1.endpoints.energy_data import get_aggregated_energy_data
+
+        mock_repository.get_by_time_range.side_effect = RepositoryError(
+            "Database connection failed",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_aggregated_energy_data(
+                area_code="DE",
+                start_time=datetime(2024, 1, 1, tzinfo=UTC),
+                end_time=datetime(2024, 1, 2, tzinfo=UTC),
+                aggregation="daily",
+                data_type=None,
+                business_type=None,
+                limit=1000,
+                repository=mock_repository,
+            )
+
+        assert exc_info.value.status_code == 500
+        assert "Database error" in exc_info.value.detail
+
+    async def test_aggregate_data_points_empty_list(self) -> None:
+        """Test aggregation function with empty data."""
+        from app.api.v1.endpoints.energy_data import _aggregate_data_points
+
+        result = _aggregate_data_points([], "daily")
+        assert result == []
+
+    async def test_aggregate_data_points_hourly(self) -> None:
+        """Test hourly aggregation logic."""
+        from app.api.v1.endpoints.energy_data import _aggregate_data_points
+
+        test_data = []
+        for i in range(2):
+            mock_point = Mock(spec=EnergyDataPoint)
+            mock_point.timestamp = datetime(2024, 1, 1, 10, i * 15, tzinfo=UTC)
+            mock_point.area_code = "DE"
+            mock_point.quantity = Decimal(f"{100 + i * 100}.0")
+            mock_point.data_type = "A75"
+            mock_point.business_type = "A01"
+            mock_point.unit = "MW"
+            mock_point.data_source = "ENTSOE"
+            mock_point.resolution = "PT15M"
+            mock_point.curve_type = "A01"
+            mock_point.document_mrid = f"doc-{i}"
+            mock_point.revision_number = 1
+            test_data.append(mock_point)
+
+        result = _aggregate_data_points(test_data, "hourly")
+
+        assert len(result) == 1
+        assert result[0].quantity == Decimal("150.0")  # Average of 100 and 200
+        assert result[0].resolution == "AGG_HOURLY"

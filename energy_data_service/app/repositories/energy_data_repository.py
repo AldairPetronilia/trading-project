@@ -402,6 +402,46 @@ class EnergyDataRepository(BaseRepository[EnergyDataPoint]):
                     },
                 ) from e
 
+    async def get_latest_by_area(
+        self,
+        area_code: str,
+        limit: int = 100,
+    ) -> list[EnergyDataPoint]:
+        """Retrieve the most recent energy data points for an area.
+
+        Args:
+            area_code: The area code to filter by
+            limit: Maximum number of records to return
+
+        Returns:
+            List of most recent energy data points, ordered by timestamp descending
+
+        Raises:
+            DataAccessError: If the database operation fails
+        """
+        async with self.database.session_factory() as session:
+            try:
+                stmt = (
+                    select(EnergyDataPoint)
+                    .where(EnergyDataPoint.area_code == area_code)
+                    .order_by(desc(EnergyDataPoint.timestamp))
+                    .limit(limit)
+                )
+
+                result = await session.execute(stmt)
+                return list(result.scalars().all())
+            except SQLAlchemyError as e:
+                error_msg = "Failed to retrieve latest energy data points for area"
+                raise DataAccessError(
+                    error_msg,
+                    model_type="EnergyDataPoint",
+                    operation="get_latest_by_area",
+                    context={
+                        "area_code": area_code,
+                        "limit": limit,
+                    },
+                ) from e
+
     async def upsert_batch(
         self,
         models: list[EnergyDataPoint],

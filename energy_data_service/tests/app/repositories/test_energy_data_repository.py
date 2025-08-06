@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timezone
 from decimal import Decimal
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from app.config.database import Database
@@ -631,3 +631,71 @@ class TestEnergyDataRepository:
         )
         assert exc_info.value.context["area_code"] == "DE_LU"
         assert exc_info.value.context["data_type"] == "actual"
+
+    @pytest.mark.asyncio
+    async def test_get_latest_by_area_success(
+        self,
+        repository: EnergyDataRepository,
+        mock_database: Database,
+        mock_session: AsyncMock,
+        multiple_energy_data_points: list[EnergyDataPoint],
+    ) -> None:
+        """Test successful retrieval of latest energy data points by area."""
+        setup_session_mock(mock_database, mock_session)
+
+        mock_result = MagicMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = multiple_energy_data_points
+        mock_result.scalars.return_value = mock_scalars
+        mock_session.execute.return_value = mock_result
+
+        result = await repository.get_latest_by_area(
+            area_code="DE",
+            limit=100,
+        )
+
+        assert result == multiple_energy_data_points
+        mock_session.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_latest_by_area_empty_result(
+        self,
+        repository: EnergyDataRepository,
+        mock_database: Database,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Test get_latest_by_area with no results."""
+        setup_session_mock(mock_database, mock_session)
+
+        mock_result = MagicMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result.scalars.return_value = mock_scalars
+        mock_session.execute.return_value = mock_result
+
+        result = await repository.get_latest_by_area(
+            area_code="NONEXISTENT",
+            limit=100,
+        )
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_latest_by_area_database_error(
+        self,
+        repository: EnergyDataRepository,
+        mock_database: Database,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Test get_latest_by_area with database error."""
+        setup_session_mock(mock_database, mock_session)
+        mock_session.execute.side_effect = SQLAlchemyError("Database error")
+
+        with pytest.raises(
+            DataAccessError,
+            match="Failed to retrieve latest energy data points for area",
+        ):
+            await repository.get_latest_by_area(
+                area_code="DE",
+                limit=100,
+            )
