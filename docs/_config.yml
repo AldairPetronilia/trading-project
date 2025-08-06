@@ -1,0 +1,86 @@
+# Jekyll Configuration for Energy Trading Project Documentation
+
+# Site settings
+title: Energy Trading Project
+description: >-
+  Production-quality energy market data collection, processing, and storage
+  system for trading signals and analytics.
+
+baseurl: "" # Leave empty if hosting at username.github.io/repository-name
+url: "https://aldairpetronilia.github.io/trading-project"
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+theme: minima
+
+# Plugins
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
+
+# Navigation
+header_pages:
+  - getting-started.md
+  - architecture.md
+  - api.md
+  - deployment.md
+
+# Collections
+collections:
+  guides:
+    output: true
+    permalink: /:collection/:name/
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "page"
+  - scope:
+      path: ""
+      type: "posts"
+    values:
+      layout: "post"
+
+# Syntax highlighting
+kramdown:
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    css_class: 'highlight'
+    span:
+      line_numbers: false
+    block:
+      line_numbers: true
+
+# Exclude files from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+  - .git/
+  - .github/
+
+# Include files
+include:
+  - _pages
+
+# SEO settings
+author: Aldair Petronilia
+social:
+  name: Aldair Petronilia
+  links:
+    - https://github.com/AldairPetronilia
+
+# GitHub repository
+repository: AldairPetronilia/trading-project
+
+# Google Analytics (uncomment and add your tracking ID)
+# google_analytics: UA-NNNNNNNN-N
