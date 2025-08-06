@@ -55,3 +55,4 @@ data/grafana
 repomix-output.xml
 .serena
 digest.txt
+.claude/

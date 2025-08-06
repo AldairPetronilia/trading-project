@@ -224,6 +224,56 @@ Directory structure:
 
 ---
 
+## CLAUDE AGENT INSTRUCTIONS
+
+These instructions apply to ALL AI assistant interactions with this codebase:
+
+### Mandatory Tool Usage
+
+1. **Always Use Serena Semantic Tools**: For ANY code exploration, reading, or analysis, you MUST use Serena's semantic tools instead of reading entire files:
+   - Use `mcp__serena__get_symbols_overview` to understand file/directory structure
+   - Use `mcp__serena__find_symbol` to locate and read specific symbols (classes, methods, functions)
+   - Use `mcp__serena__search_for_pattern` for targeted pattern searches
+   - Use `mcp__serena__find_referencing_symbols` to understand code relationships
+   - Only use `Read` tool for non-code files or when Serena tools are insufficient
+
+2. **Think Before Every Action**: You MUST use thinking tools before taking any significant action:
+   - Use `mcp__serena__think_about_task_adherence` before modifying code
+   - Use `mcp__serena__think_about_collected_information` after gathering information
+   - Use `mcp__serena__think_about_whether_you_are_done` when completing tasks
+
+3. **Resource-Efficient Code Reading**:
+   - NEVER read entire source files unless absolutely necessary
+   - Start with symbol overviews, then read only needed symbol bodies
+   - Use targeted searches instead of broad file reads
+   - Leverage the semantic understanding of the codebase structure
+
+### Workflow Requirements
+
+1. **Information Gathering Phase**:
+   - Always start with `mcp__serena__check_onboarding_performed`
+   - Use `mcp__serena__get_symbols_overview` to understand relevant files
+   - Use `mcp__serena__find_symbol` with `include_body=False` first, then `include_body=True` only for needed symbols
+
+2. **Code Modification Phase**:
+   - Use `mcp__serena__think_about_task_adherence` before any code changes
+   - Prefer `mcp__serena__replace_symbol_body` for complete symbol replacements
+   - Use `mcp__serena__insert_after_symbol` or `mcp__serena__insert_before_symbol` for additions
+   - Use `mcp__serena__replace_regex` for targeted line-level changes
+
+3. **Completion Phase**:
+   - Use `mcp__serena__think_about_whether_you_are_done` before concluding
+   - Write relevant findings to memory using `mcp__serena__write_memory`
+   - Verify all requirements have been met
+
+### Memory Management
+
+- Always check existing memories with `mcp__serena__list_memories` before starting complex tasks
+- Write important architectural insights to memory for future reference
+- Use meaningful memory names that describe the content
+
+---
+
 ## TECHNICAL STANDARDS
 
 These principles apply to ALL agents when performing their specialized work:
