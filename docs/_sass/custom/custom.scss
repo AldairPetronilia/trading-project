@@ -37,10 +37,31 @@
 }
 
 // Code blocks
-pre.highlight {
-  border-radius: 10px;
+pre.highlight, .highlight pre {
+  border-radius: 8px;
   padding: 1rem 1.25rem;
   background: $code-background-color;
+  border: 1px solid $border-color;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+// Inline code
+code {
+  padding: 0.125rem 0.25rem;
+  background: $code-background-color;
+  border: 1px solid $border-color;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+// Ensure code in pre blocks doesn't get double-styled
+pre code {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 // Footer

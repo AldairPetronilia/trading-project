@@ -66,7 +66,10 @@ kramdown:
   syntax_highlighter_opts:
     css_class: 'highlight'
     block:
-      line_numbers: true
+      line_numbers: false
+  input: GFM
+  hard_wrap: false
+  auto_ids: true
 
 # Collections (optional future expansion)
 collections:
