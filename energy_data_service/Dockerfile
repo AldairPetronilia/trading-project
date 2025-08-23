@@ -1,5 +1,10 @@
 FROM python:3.13-slim-bookworm
 
+# Install system dependencies for health checks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install UV
 RUN pip install uv
 

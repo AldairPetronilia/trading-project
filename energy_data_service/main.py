@@ -23,12 +23,15 @@ The service automatically:
 """
 
 import asyncio
+import contextlib
 import logging
 import signal
 import sys
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import uvicorn
+from app.api.app import create_app
 from app.container import Container
 from app.exceptions.service_exceptions import BackfillError, ServiceError
 from app.models.base import Base
@@ -354,6 +357,77 @@ class SimpleSchedulerRunner:
             self.logger.exception("Failed to initialize scheduler service")
             sys.exit(1)
 
+    async def _start_api_server(self) -> uvicorn.Server:
+        """Start the FastAPI server for REST API access."""
+        try:
+            self.logger.info("Starting FastAPI API server...")
+
+            # Create FastAPI application using existing factory
+            app = create_app()
+
+            # Get configuration from container
+            settings = self.container.config()
+
+            # Configure uvicorn server
+            config = uvicorn.Config(
+                app=app,
+                host=settings.http.host,
+                port=settings.http.port,
+                log_level=settings.logging.level.lower(),
+                access_log=settings.http.access_log,
+                use_colors=False,  # Better for container logs
+            )
+
+            server = uvicorn.Server(config)
+
+            # Start server in background task
+            self.api_task = asyncio.create_task(server.serve())
+
+            self.logger.info(
+                "FastAPI server started on %s:%s",
+                settings.http.host,
+                settings.http.port,
+            )
+        except Exception:
+            self.logger.exception("Failed to start API server")
+            raise
+        else:
+            return server
+
+    async def _shutdown_services(
+        self, scheduler_service: Any, api_server: uvicorn.Server
+    ) -> None:
+        """Gracefully shutdown both scheduler and API services."""
+        self.logger.info("Initiating graceful shutdown of all services...")
+
+        # Stop accepting new API requests
+        self.logger.info("Stopping API server...")
+        api_server.should_exit = True
+
+        # Stop scheduler service
+        self.logger.info("Stopping scheduler service...")
+        stop_result = await scheduler_service.stop()
+        if stop_result.success:
+            self.logger.info("Scheduler service stopped successfully")
+        else:
+            self.logger.error("Error stopping scheduler: %s", stop_result.message)
+
+        # Wait for API task to complete
+        if hasattr(self, "api_task") and not self.api_task.done():
+            self.logger.info("Waiting for API server to finish...")
+            try:
+                await asyncio.wait_for(self.api_task, timeout=30.0)
+                self.logger.info("API server stopped successfully")
+            except TimeoutError:
+                self.logger.warning(
+                    "API server shutdown timed out, forcing cancellation"
+                )
+                self.api_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self.api_task
+
+        self.logger.info("All services stopped successfully")
+
     async def _perform_startup_tasks(self, settings: Any) -> None:
         """Perform startup backfill and data verification tasks."""
         # Perform startup backfill analysis and fill gaps (if enabled)
@@ -370,12 +444,15 @@ class SimpleSchedulerRunner:
             self.logger.info("Startup data verification disabled in configuration")
 
     async def run(self) -> None:
-        """Run the scheduler service with proper initialization and cleanup."""
+        """Run the unified service with both scheduler and API server."""
         self.setup_signal_handlers()
+
+        scheduler_service = None
+        api_server = None
 
         try:
             self.logger.info("=" * 60)
-            self.logger.info("🔋 Energy Data Service Starting")
+            self.logger.info("🔌 Energy Data Service Starting")
             self.logger.info("=" * 60)
 
             # Initialize database and create tables
@@ -385,33 +462,43 @@ class SimpleSchedulerRunner:
             self._validate_api_configuration()
             settings = self.container.config()
 
-            # Start scheduler service
+            # Start both services
             scheduler_service = await self._start_scheduler_service()
+            api_server = await self._start_api_server()
 
             # Perform startup tasks
             await self._perform_startup_tasks(settings)
 
-            # Startup complete
+            # Both services ready
             self.logger.info("=" * 60)
-            self.logger.info("✅ Energy Data Service Ready - Collecting Data")
+            self.logger.info("✅ Energy Data Service Ready")
+            self.logger.info("📊 Scheduler: Collecting data every 30 minutes")
+            self.logger.info(
+                "🌐 API: Available at http://%s:%s/docs",
+                settings.http.host,
+                settings.http.port,
+            )
             self.logger.info("=" * 60)
 
             # Wait for shutdown signal
             self.logger.info("Press Ctrl+C to stop the service")
             await self.shutdown_event.wait()
 
-            # Stop scheduler service
-            self.logger.info("Stopping scheduler service...")
-            stop_result = await scheduler_service.stop()
-            if stop_result.success:
-                self.logger.info("Scheduler service stopped successfully")
-            else:
-                self.logger.error("Error stopping scheduler: %s", stop_result.message)
+            # Graceful shutdown of both services
+            if scheduler_service and api_server:
+                await self._shutdown_services(scheduler_service, api_server)
 
         except KeyboardInterrupt:
             self.logger.info("Received keyboard interrupt")
+            if scheduler_service and api_server:
+                await self._shutdown_services(scheduler_service, api_server)
         except Exception:
             self.logger.exception("Application error")
+            if scheduler_service and api_server:
+                try:
+                    await self._shutdown_services(scheduler_service, api_server)
+                except Exception:
+                    self.logger.exception("Error during emergency shutdown")
             sys.exit(1)
         finally:
             self.logger.info("Shutdown complete")

@@ -34,6 +34,8 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
+    ports:
+      - "8000:8000"  # Expose FastAPI server port
     environment:
       - DATABASE__HOST=timescaledb
       - DATABASE__PORT=5432
@@ -42,11 +44,20 @@ services:
       - DATABASE__NAME=${DB_NAME}
       - ENTSOE_CLIENT__API_TOKEN=${ENTSOE_API_TOKEN}
       - SCHEDULER__USE_PERSISTENT_JOB_STORE=false
+      - HTTP__HOST=${HTTP_HOST:-0.0.0.0}
+      - HTTP__PORT=${HTTP_PORT:-8000}
+      - HTTP__ACCESS_LOG=${HTTP_ACCESS_LOG:-true}
     volumes:
       - "./logs:/app/logs"
     networks:
       - trading_project_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   adminer:
     image: adminer:latest
