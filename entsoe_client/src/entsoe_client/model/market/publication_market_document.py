@@ -8,8 +8,8 @@ from pydantic_xml import BaseXmlModel, element
 from entsoe_client.adapters import date_time_adapter
 from entsoe_client.model.common.document_type import DocumentType
 from entsoe_client.model.common.market_role_type import MarketRoleType
-from entsoe_client.model.load.market_participant_mrid import MarketParticipantMRID
 
+from .market_participant_mrid import MarketParticipantMRID
 from .market_time_interval import ENTSOE_MARKET_NSMAP, MarketTimeInterval
 from .market_time_series import MarketTimeSeries
 

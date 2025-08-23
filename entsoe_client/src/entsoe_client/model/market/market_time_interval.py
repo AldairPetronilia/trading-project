@@ -8,7 +8,7 @@ from pydantic_xml import BaseXmlModel, element
 from entsoe_client.adapters import date_time_adapter
 
 ENTSOE_MARKET_NSMAP = {
-    "": "urn:iec62325.351:tc57wg16:451-6:publicationmarketdocument:3:0",
+    "": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3",
 }
 
 
