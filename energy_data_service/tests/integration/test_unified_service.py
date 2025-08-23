@@ -316,8 +316,6 @@ class TestUnifiedServiceIntegration:
         mock_task.done.assert_called()
         # The task should be awaited via asyncio.wait_for, not directly
         # So we don't check assert_awaited_once() since it goes through asyncio.wait_for
-        # The task should be awaited via asyncio.wait_for, not directly
-        # So we don't check assert_awaited_once() since it goes through asyncio.wait_for
 
     async def test_service_error_handling(
         self, unified_service: SimpleSchedulerRunner
