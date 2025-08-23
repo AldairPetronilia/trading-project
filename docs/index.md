@@ -1,64 +1,42 @@
-# Energy Trading Project
+---
+layout: home
+title: Home
+nav_order: 1
+description: "Production-quality energy market data collection system"
+permalink: /
+---
 
-Welcome to the Energy Trading Project documentation! This system provides production-quality energy market data collection, processing, and storage for trading signals and analytics.
+<div class="hero-section">
+  <h1 class="fs-9">Energy Trading Data Platform</h1>
+  <p class="fs-6">Automated collection, processing, and analysis of European energy market data.</p>
+  <p>
+    <a class="btn btn-primary" href="{{ '/getting-started.html' | relative_url }}">Get Started</a>
+    <a class="btn" href="https://github.com/AldairPetronilia/trading-project">View on GitHub</a>
+  </p>
+</div>
 
-## Overview
+## Highlights
 
-The Energy Trading Project is a Python-based system designed to collect, process, and store energy market data from the ENTSO-E (European Network of Transmission System Operators for Electricity) API. Built with Clean Architecture principles, it provides reliable data infrastructure for energy trading operations.
+<div class="feature-card">
+<ul>
+<li><strong>Real-time Data</strong> — Automated collection every 15 minutes</li>
+<li><strong>Historical Backfill</strong> — Gap detection and recovery</li>
+<li><strong>TimescaleDB</strong> — Optimized time-series storage</li>
+<li><strong>Grafana</strong> — Ready-to-use dashboards</li>
+</ul>
+</div>
 
-### Key Features
+## Use cases
+- Energy trading & signal research
+- Market analysis & reporting
+- Forecasting & ML model training
 
-- 🔄 **Automated Data Collection**: Continuous data fetching from ENTSO-E API
-- 📊 **Gap Detection & Backfill**: Intelligent handling of missing data periods
-- ⚡ **TimescaleDB Integration**: Optimized time-series storage with compression
-- 🔍 **Comprehensive Monitoring**: Structured logging and health monitoring
-- 🐳 **Docker Deployment**: Production-ready containerized deployment
-- 📈 **Grafana Integration**: Real-time data visualization dashboards
-
-## Architecture
-
-The project follows Clean Architecture principles with clearly separated concerns:
-
-- **Collectors**: Fetch raw data from external sources
-- **Processors**: Transform raw data into domain models
-- **Services**: Business logic orchestration and workflows
-- **Repositories**: Database abstraction and queries
-- **Models**: SQLAlchemy database schema definitions
-
-## Tech Stack
-
-- **Python 3.13+** - Latest Python version
-- **FastAPI** - Modern async web framework
-- **SQLAlchemy 2.0** - Async ORM with type safety
-- **TimescaleDB** - PostgreSQL extension for time-series data
-- **Docker** - Containerized deployment
-- **uv** - Fast Python package manager
-
-## Quick Links
-
-- [Getting Started Guide](getting-started.md)
-- [Architecture Overview](architecture.md)
-- [API Documentation](api.md)
-- [Deployment Guide](deployment.md)
-
-## Project Structure
-
-```
-trading-project/
-├── energy_data_service/     # Core data service
-├── entsoe_client/          # ENTSO-E API client library
-├── scripts/                # Database initialization scripts
-└── docs/                   # Documentation (you are here!)
-```
-
-## Support
-
-For questions, issues, or contributions:
-
-- Check the [GitHub Issues](https://github.com/AldairPetronilia/trading-project/issues)
-- Review the [API Documentation](api.md)
-- Read the [Architecture Guide](architecture.md)
+## Quick links
+- [Getting Started](getting-started.html)
+- [Architecture](architecture.html)
+- [API](api.html)
+- [Deployment](deployment.html)
 
 ---
 
-**Last Updated**: January 2025
+<small>Built with ❤️ using Just the Docs</small>

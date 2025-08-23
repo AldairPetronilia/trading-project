@@ -1,0 +1,40 @@
+// Energy Trading Theme — light/dark tuned for readability
+$blue-000: #4285F4;
+$blue-100: #1A73E8;
+$blue-200: #1557B0;
+
+$green-100: #11b563;
+$yellow-100: #F9A825;
+
+$grey-dk-000: #8a8890;
+$grey-dk-100: #5c5962;
+$grey-dk-200: #403e46;
+$grey-dk-250: #322f37;
+$grey-dk-300: #27262b;
+
+$grey-lt-000: #ffffff;
+$grey-lt-100: #f7f7fb;
+$grey-lt-200: #efedf2;
+$grey-lt-300: #c9c6cf;
+
+$body-background-color: $grey-lt-100;
+$body-heading-color: #161616;
+$body-text-color: #2a2a2a;
+
+$link-color: $blue-100;
+$btn-primary-color: $blue-200;
+$border-color: $grey-lt-200;
+
+// Code / tables
+$table-background-color: #fff;
+$code-background-color: #fbfbfe;
+
+// Dark-mode (prefers-color-scheme) override for comfort
+@media (prefers-color-scheme: dark) {
+  :root {
+    --jtd-body-background-color: #1a1a1d;
+    --jtd-body-text-color: #e8e8ea;
+    --jtd-body-heading-color: #ffffff;
+    --jtd-link-color: #8ab4ff;
+  }
+}

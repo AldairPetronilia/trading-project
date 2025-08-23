@@ -1,0 +1,9 @@
+<svg width="160" height="36" viewBox="0 0 160 36" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Energy Trading Project</title>
+  <desc id="desc">Minimal logotype</desc>
+  <rect x="0" y="8" width="36" height="20" rx="6" fill="#1A73E8"/>
+  <path d="M10 25 L18 11 L16 18 L26 18 L18 31 L20 24 Z" fill="#ffffff"/>
+  <text x="44" y="25" font-family="Inter, system-ui, sans-serif" font-size="18" fill="#1A73E8" font-weight="700">
+    Energy Trading Project
+  </text>
+</svg>

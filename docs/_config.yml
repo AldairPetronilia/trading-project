@@ -1,62 +1,80 @@
-# Jekyll Configuration for Energy Trading Project Documentation
-
-# Site settings
+# Jekyll / Just the Docs configuration
 title: Energy Trading Project
-description: >-
-  Production-quality energy market data collection, processing, and storage
-  system for trading signals and analytics.
+description: Production-quality energy market data collection, processing, and storage for trading signals and analytics.
+url: "https://aldairpetronilia.github.io"
+baseurl: "/trading-project"
 
-baseurl: "" # Leave empty if hosting at username.github.io/repository-name
-url: "https://aldairpetronilia.github.io/trading-project"
+# Theme
+remote_theme: just-the-docs/just-the-docs@v0.7.0
+color_scheme: "energy"
+# Enable/disable search
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  rel_url: true
+  button: true
 
-# Build settings
-markdown: kramdown
-highlighter: rouge
-theme: minima
+# Navigation / UI
+logo: "/trading-project/docs/assets/logo.svg"
+favicon_ico: "/trading-project/docs/assets/favicon.svg"
+aux_links:
+  "GitHub":
+    - "//github.com/AldairPetronilia/trading-project"
+aux_links_new_tab: true
+back_to_top: true
+back_to_top_text: "Back to top"
+
+# Pages shown in top header (optional; sidebar still shows full nav)
+header_pages:
+  - index.md
+  - getting-started.md
+  - architecture.md
+  - api.md
+  - deployment.md
+
+# Edit this page links
+gh_edit_link: true
+gh_edit_link_text: "Edit this page on GitHub"
+gh_edit_repository: "https://github.com/AldairPetronilia/trading-project"
+gh_edit_branch: "main"
+gh_edit_source: docs
+gh_edit_view_mode: "tree"
+
+# Footer
+footer_content: >-
+  Copyright &copy; {{"{{"}} site.time | date: "%Y" {{"}}"}} Energy Trading Project —
+  <a href="https://github.com/AldairPetronilia/trading-project/blob/main/LICENSE">MIT License</a>
+
+last_edit_timestamp: true
+last_edit_time_format: "%b %e %Y at %H:%M"
 
 # Plugins
 plugins:
   - jekyll-feed
   - jekyll-sitemap
   - jekyll-seo-tag
+  - jekyll-remote-theme
 
-# Navigation
-header_pages:
-  - getting-started.md
-  - architecture.md
-  - api.md
-  - deployment.md
+# Markdown / syntax highlight
+markdown: kramdown
+highlighter: rouge
+kramdown:
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    css_class: 'highlight'
+    block:
+      line_numbers: true
 
-# Collections
+# Collections (optional future expansion)
 collections:
   guides:
     output: true
     permalink: /:collection/:name/
 
-# Defaults
-defaults:
-  - scope:
-      path: ""
-      type: "pages"
-    values:
-      layout: "page"
-  - scope:
-      path: ""
-      type: "posts"
-    values:
-      layout: "post"
-
-# Syntax highlighting
-kramdown:
-  syntax_highlighter: rouge
-  syntax_highlighter_opts:
-    css_class: 'highlight'
-    span:
-      line_numbers: false
-    block:
-      line_numbers: true
-
-# Exclude files from processing
+# Excludes
 exclude:
   - Gemfile
   - Gemfile.lock
@@ -68,19 +86,5 @@ exclude:
   - .git/
   - .github/
 
-# Include files
-include:
-  - _pages
-
-# SEO settings
-author: Aldair Petronilia
-social:
-  name: Aldair Petronilia
-  links:
-    - https://github.com/AldairPetronilia
-
-# GitHub repository
 repository: AldairPetronilia/trading-project
-
-# Google Analytics (uncomment and add your tracking ID)
-# google_analytics: UA-NNNNNNNN-N
+author: Aldair Petronilia

@@ -1,0 +1,56 @@
+// Minimal, clean enhancements
+.hero-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 2.5rem 2rem;
+  border-radius: 16px;
+  margin-bottom: 1.5rem;
+  color: white;
+  text-align: center;
+  box-shadow: 0 4px 24px rgba(0,0,0,.08);
+  h1 { color: white !important; margin-bottom: .6rem; }
+  p { color: rgba(255,255,255,.95); font-size: 1.1rem; }
+}
+
+.feature-card {
+  border: 1px solid $border-color;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin: 1rem 0;
+  background-color: #fff;
+  transition: transform .15s ease, box-shadow .15s ease;
+  &:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,.06); }
+  h3 { color: $blue-100; margin-top: 0; }
+}
+
+// Buttons (match Just-the-Docs look & feel)
+.btn {
+  display: inline-block;
+  padding: .6rem 1.1rem;
+  border-radius: 8px;
+  border: 2px solid $link-color;
+  color: $link-color;
+  text-decoration: none;
+  font-weight: 600;
+  transition: .15s ease;
+  &:hover { text-decoration: none; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  &.btn-primary { background: $link-color; color: white; }
+}
+
+// Code blocks
+pre.highlight {
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  background: $code-background-color;
+}
+
+// Footer
+.site-footer { margin-top: 3rem; border-top: 2px solid $blue-100; padding-top: 1.25rem; }
+
+// Accessibility
+a:focus, button:focus { outline: 2px solid $blue-100; outline-offset: 2px; }
+.sr-only { position: absolute; width:1px; height:1px; margin:-1px; clip:rect(0,0,0,0); overflow:hidden; }
+
+// Responsive
+@media (max-width: 768px) {
+  .hero-section { padding: 1.75rem 1rem; border-radius: 12px; }
+}
