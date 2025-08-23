@@ -109,6 +109,10 @@ class TestSettings:
         assert config.http.connection_timeout == timedelta(seconds=30)
         assert config.http.read_timeout == timedelta(seconds=60)
         assert config.http.write_timeout == timedelta(seconds=60)
+        assert config.http.host == "0.0.0.0"  # noqa: S104
+        assert config.http.port == 8000
+        assert config.http.workers == 1
+        assert config.http.access_log is True
 
         # Logging defaults
         assert config.logging.level == "INFO"
@@ -188,6 +192,67 @@ class TestSettings:
 
         expected_url = "postgresql+asyncpg://testuser:testpass@testhost:3306/testdb"
         assert config.database.url == expected_url
+
+    def test_http_config_validation_invalid_port(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(
+                entsoe_client={"api_token": "test-token-123"},
+                http={"port": 0},
+                _env_file=None,
+            )
+
+        errors = exc_info.value.errors()
+        # Check for the field and constraint type
+        assert any(
+            error.get("loc") == ("http", "port")
+            and "greater_than_equal" in error.get("type", "")
+            for error in errors
+        )
+
+    def test_http_config_validation_valid_port_range(self) -> None:
+        # Test valid ports
+        config_min = Settings(
+            entsoe_client={"api_token": "test-token-123"},
+            http={"port": 1},
+            _env_file=None,
+        )
+        assert config_min.http.port == 1
+
+        config_max = Settings(
+            entsoe_client={"api_token": "test-token-123"},
+            http={"port": 65535},
+            _env_file=None,
+        )
+        assert config_max.http.port == 65535
+
+    def test_http_config_server_defaults(self) -> None:
+        config = Settings(
+            entsoe_client={"api_token": "test-token-123"},
+            _env_file=None,
+        )
+
+        # Server configuration defaults
+        assert config.http.host == "0.0.0.0"  # noqa: S104
+        assert config.http.port == 8000
+        assert config.http.workers == 1
+        assert config.http.access_log is True
+
+    def test_http_config_server_custom_values(self) -> None:
+        config = Settings(
+            entsoe_client={"api_token": "test-token-123"},
+            http={
+                "host": "127.0.0.1",
+                "port": 9000,
+                "workers": 4,
+                "access_log": False,
+            },
+            _env_file=None,
+        )
+
+        assert config.http.host == "127.0.0.1"
+        assert config.http.port == 9000
+        assert config.http.workers == 4
+        assert config.http.access_log is False
 
 
 class TestEnvironmentVariableLoading:

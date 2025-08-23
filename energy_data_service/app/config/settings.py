@@ -73,6 +73,12 @@ class HttpConfig(BaseModel):
         default=timedelta(seconds=60),
         description="HTTP write timeout",
     )
+    host: str = Field(default="0.0.0.0", description="Host to bind the API server to")  # noqa: S104
+    port: int = Field(
+        default=8000, ge=MIN_PORT, le=MAX_PORT, description="Port for the API server"
+    )
+    workers: int = Field(default=1, ge=1, description="Number of worker processes")
+    access_log: bool = Field(default=True, description="Enable access logging")
 
 
 class EntsoEClientConfig(BaseModel):
