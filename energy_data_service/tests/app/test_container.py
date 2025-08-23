@@ -10,6 +10,7 @@ from app.container import Container
 from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
 from app.repositories.backfill_progress_repository import BackfillProgressRepository
 from app.repositories.energy_data_repository import EnergyDataRepository
+from app.repositories.energy_price_repository import EnergyPriceRepository
 
 
 @pytest.fixture(autouse=True)
@@ -39,6 +40,7 @@ class TestContainer:
         assert hasattr(container, "entsoe_client")
         assert hasattr(container, "entsoe_collector")
         assert hasattr(container, "energy_data_repository")
+        assert hasattr(container, "energy_price_repository")
         assert hasattr(container, "backfill_progress_repository")
         assert hasattr(container, "gl_market_document_processor")
 
@@ -114,6 +116,16 @@ class TestContainer:
         repository = container.energy_data_repository()
 
         assert isinstance(repository, EnergyDataRepository)
+        assert repository.database is container.database()
+
+    @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
+    def test_energy_price_repository_provider_creation(self) -> None:
+        """Test that energy price repository provider creates repository instance."""
+        container = Container()
+
+        repository = container.energy_price_repository()
+
+        assert isinstance(repository, EnergyPriceRepository)
         assert repository.database is container.database()
 
     @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
@@ -197,17 +209,20 @@ class TestContainer:
         config = container.config()
         database = container.database()
         repository = container.energy_data_repository()
+        price_repository = container.energy_price_repository()
         processor = container.gl_market_document_processor()
 
         # Basic type checks
         assert isinstance(config, Settings)
         assert isinstance(database, Database)
         assert isinstance(repository, EnergyDataRepository)
+        assert isinstance(price_repository, EnergyPriceRepository)
         assert isinstance(processor, GlMarketDocumentProcessor)
 
         # Verify dependency relationships
         assert database.config is config
         assert repository.database is database
+        assert price_repository.database is database
 
     @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
     def test_backfill_progress_repository_provider_creation(self) -> None:
@@ -239,15 +254,18 @@ class TestContainer:
         # Get instances
         database = container.database()
         energy_repository = container.energy_data_repository()
+        price_repository = container.energy_price_repository()
         progress_repository = container.backfill_progress_repository()
 
         # Verify they are different instances
         assert energy_repository is not progress_repository
+        assert energy_repository is not price_repository
+        assert price_repository is not progress_repository
 
         # But they share the same database instance
         assert energy_repository.database is database
+        assert price_repository.database is database
         assert progress_repository.database is database
-        assert energy_repository.database is progress_repository.database
 
     @patch.dict(os.environ, {"ENTSOE_CLIENT__API_TOKEN": "test_token_1234567890"})
     def test_backfill_service_provider_with_progress_repository(self) -> None:

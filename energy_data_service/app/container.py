@@ -6,6 +6,7 @@ from app.config.settings import BackfillConfig, Settings
 from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
 from app.repositories.backfill_progress_repository import BackfillProgressRepository
 from app.repositories.energy_data_repository import EnergyDataRepository
+from app.repositories.energy_price_repository import EnergyPriceRepository
 from app.services.backfill_service import BackfillService
 from app.services.entsoe_data_service import EntsoEDataService
 from app.services.scheduler_service import SchedulerService
@@ -45,6 +46,13 @@ class Container(containers.DeclarativeContainer):
     energy_data_repository: providers.Factory[EnergyDataRepository] = providers.Factory(
         EnergyDataRepository,
         database=database,
+    )
+
+    energy_price_repository: providers.Factory[EnergyPriceRepository] = (
+        providers.Factory(
+            EnergyPriceRepository,
+            database=database,
+        )
     )
 
     backfill_progress_repository: providers.Factory[BackfillProgressRepository] = (
