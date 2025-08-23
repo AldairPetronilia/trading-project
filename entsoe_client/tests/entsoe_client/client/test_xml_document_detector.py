@@ -291,7 +291,11 @@ class TestXmlDocumentDetector:
         # Assert
         assert XmlDocumentType.GL_MARKET_DOCUMENT.value == "GL_MarketDocument"
         assert (
+            XmlDocumentType.PUBLICATION_MARKET_DOCUMENT.value
+            == "Publication_MarketDocument"
+        )
+        assert (
             XmlDocumentType.ACKNOWLEDGEMENT_MARKET_DOCUMENT.value
             == "Acknowledgement_MarketDocument"
         )
-        assert len(XmlDocumentType) == 2
+        assert len(XmlDocumentType) == 3

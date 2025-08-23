@@ -9,6 +9,7 @@ class XmlDocumentType(Enum):
     """Supported ENTSO-E XML document types."""
 
     GL_MARKET_DOCUMENT = "GL_MarketDocument"
+    PUBLICATION_MARKET_DOCUMENT = "Publication_MarketDocument"
     ACKNOWLEDGEMENT_MARKET_DOCUMENT = "Acknowledgement_MarketDocument"
 
 
@@ -64,6 +65,8 @@ class XmlDocumentDetector:
             # Map root element to document type (only exact matches, no namespace prefixes)
             if root_element == "GL_MarketDocument":
                 return XmlDocumentType.GL_MARKET_DOCUMENT
+            if root_element == "Publication_MarketDocument":
+                return XmlDocumentType.PUBLICATION_MARKET_DOCUMENT
             if root_element == "Acknowledgement_MarketDocument":
                 return XmlDocumentType.ACKNOWLEDGEMENT_MARKET_DOCUMENT
 

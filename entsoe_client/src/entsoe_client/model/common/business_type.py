@@ -20,6 +20,7 @@ class BusinessType(Enum):
     UNPLANNED_OUTAGE = ("A54", "Unplanned outage")
     MINIMUM_POSSIBLE = ("A60", "Minimum possible")
     MAXIMUM_POSSIBLE = ("A61", "Maximum possible")
+    DAY_AHEAD_PRICES = ("A62", "Day-ahead prices")
     INTERNAL_REDISPATCH = ("A85", "Internal redispatch")
     POSITIVE_FORECAST_MARGIN = (
         "A91",
