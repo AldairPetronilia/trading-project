@@ -4,6 +4,9 @@ from typing import Protocol
 
 from entsoe_client.model.common.area_code import AreaCode
 from entsoe_client.model.load.gl_market_document import GlMarketDocument
+from entsoe_client.model.market.publication_market_document import (
+    PublicationMarketDocument,
+)
 
 
 class EntsoEClient(Protocol):
@@ -163,6 +166,34 @@ class EntsoEClient(Protocol):
 
         Returns:
             Market document containing year-ahead forecast margin data
+
+        Raises:
+            EntsoEClientException: If the request fails or parameters are invalid
+        """
+        ...
+
+    async def get_day_ahead_prices(
+        self,
+        in_domain: AreaCode,
+        out_domain: AreaCode,
+        period_start: datetime,
+        period_end: datetime,
+        offset: int | None = None,
+    ) -> PublicationMarketDocument | None:
+        """
+        Retrieve day-ahead prices [4.2.10].
+        Returns day-ahead electricity prices published for bidding zones.
+        One year range limit applies, minimum time interval is one day.
+
+        Args:
+            in_domain: The bidding zone/domain area code for input
+            out_domain: The bidding zone/domain area code for output (must match in_domain)
+            period_start: Start of the time period (inclusive)
+            period_end: End of the time period (exclusive)
+            offset: Optional pagination offset for large result sets
+
+        Returns:
+            Market document containing day-ahead price data
 
         Raises:
             EntsoEClientException: If the request fails or parameters are invalid
