@@ -289,12 +289,27 @@ class SimpleSchedulerRunner:
                     "if_not_exists => TRUE);"
                 )
             )
-            self.logger.info("TimescaleDB hypertable configured")
+            self.logger.info("TimescaleDB hypertable for energy_data_points configured")
         except SQLAlchemyError:
             # Hypertable might already exist or table might not exist yet
-            self.logger.debug("Hypertable creation skipped")
+            self.logger.debug("Energy data hypertable creation skipped")
 
-        # Enable compression for better storage efficiency
+        # Create hypertable for price data
+        try:
+            await conn.execute(
+                text(
+                    "SELECT create_hypertable('energy_price_points', 'timestamp', "
+                    "if_not_exists => TRUE);"
+                )
+            )
+            self.logger.info(
+                "TimescaleDB hypertable for energy_price_points configured"
+            )
+        except SQLAlchemyError:
+            # Hypertable might already exist or table might not exist yet
+            self.logger.debug("Price data hypertable creation skipped")
+
+        # Enable compression for better storage efficiency on energy data
         try:
             await conn.execute(
                 text(
@@ -305,10 +320,26 @@ class SimpleSchedulerRunner:
                     ");"
                 )
             )
-            self.logger.info("TimescaleDB compression enabled")
+            self.logger.info("TimescaleDB compression enabled for energy_data_points")
         except SQLAlchemyError:
             # Compression might already be enabled
-            self.logger.debug("Compression setup skipped")
+            self.logger.debug("Energy data compression setup skipped")
+
+        # Enable compression for price data
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE energy_price_points SET ("
+                    "timescaledb.compress, "
+                    "timescaledb.compress_segmentby = 'area_code, data_type, business_type', "
+                    "timescaledb.compress_orderby = 'timestamp DESC'"
+                    ");"
+                )
+            )
+            self.logger.info("TimescaleDB compression enabled for energy_price_points")
+        except SQLAlchemyError:
+            # Compression might already be enabled
+            self.logger.debug("Price data compression setup skipped")
 
         # Add compression policy to automatically compress chunks older than 7 days
         try:
@@ -317,10 +348,26 @@ class SimpleSchedulerRunner:
                     "SELECT add_compression_policy('energy_data_points', INTERVAL '7 days');"
                 )
             )
-            self.logger.info("TimescaleDB compression policy configured")
+            self.logger.info(
+                "TimescaleDB compression policy configured for energy_data_points"
+            )
         except SQLAlchemyError:
             # Policy might already exist
-            self.logger.debug("Compression policy setup skipped")
+            self.logger.debug("Energy data compression policy setup skipped")
+
+        # Add compression policy for price data
+        try:
+            await conn.execute(
+                text(
+                    "SELECT add_compression_policy('energy_price_points', INTERVAL '7 days');"
+                )
+            )
+            self.logger.info(
+                "TimescaleDB compression policy configured for energy_price_points"
+            )
+        except SQLAlchemyError:
+            # Policy might already exist
+            self.logger.debug("Price data compression policy setup skipped")
 
     def _validate_api_configuration(self) -> None:
         """Validate ENTSO-E API configuration."""

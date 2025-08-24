@@ -9,8 +9,8 @@ from entsoe_client.model.common.contract_market_agreement_type import (
     ContractMarketAgreementType,
 )
 from entsoe_client.model.common.curve_type import CurveType
-from entsoe_client.model.common.domain_mrid import DomainMRID
 
+from .market_domain_mrid import MarketDomainMRID
 from .market_period import MarketPeriod
 from .market_time_interval import ENTSOE_MARKET_NSMAP
 
@@ -21,9 +21,12 @@ class MarketTimeSeries(BaseXmlModel, tag="TimeSeries", nsmap=ENTSOE_MARKET_NSMAP
     mRID: str = element(tag="mRID")
     auction_type: AuctionType | None = element(tag="auction.type", default=None)
     businessType: BusinessType = element(tag="businessType")
-    # Temporarily make these fields optional until XML parsing is properly fixed
-    in_domain_mRID: DomainMRID | None = element(tag="in_Domain.mRID", default=None)
-    out_domain_mRID: DomainMRID | None = element(tag="out_Domain.mRID", default=None)
+    in_domain_mRID: MarketDomainMRID | None = element(
+        tag="in_Domain.mRID", default=None
+    )
+    out_domain_mRID: MarketDomainMRID | None = element(
+        tag="out_Domain.mRID", default=None
+    )
     contract_market_agreement_type: ContractMarketAgreementType | None = element(
         tag="contract_MarketAgreement.type", default=None
     )
@@ -31,8 +34,13 @@ class MarketTimeSeries(BaseXmlModel, tag="TimeSeries", nsmap=ENTSOE_MARKET_NSMAP
     price_measure_unit_name: str | None = element(
         tag="price_Measure_Unit.name", default=None
     )
+    # Add missing field for classification sequence position
+    classification_sequence_position: int | None = element(
+        tag="classificationSequence_AttributeInstanceComponent.position", default=None
+    )
     curveType: CurveType | None = element(tag="curveType", default=None)
-    period: MarketPeriod | None = None
+    # Fix: Use proper element mapping for Period
+    period: MarketPeriod = element(tag="Period")
 
     @field_serializer("auction_type")  # type: ignore[misc]
     def encode_auction_type(self, value: AuctionType | None) -> str | None:

@@ -11,4 +11,5 @@ class MarketPeriod(BaseXmlModel, tag="Period", nsmap=ENTSOE_MARKET_NSMAP):  # ty
 
     timeInterval: MarketTimeInterval = element(tag="timeInterval")
     resolution: str = element(tag="resolution")
-    points: list[MarketPoint]
+    # Fix: Use proper element mapping for list of Point elements
+    points: list[MarketPoint] = element(tag="Point", default=[])

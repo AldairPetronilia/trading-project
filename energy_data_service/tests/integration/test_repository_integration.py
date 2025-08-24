@@ -2,7 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncGenerator, Generator
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -95,6 +95,17 @@ async def initialized_database(database: Database) -> AsyncGenerator[Database]:
             text(
                 """
             SELECT create_hypertable('energy_data_points', 'timestamp',
+                                    chunk_time_interval => INTERVAL '1 day',
+                                    if_not_exists => TRUE);
+        """,
+            ),
+        )
+
+        # Convert energy_price_points table to hypertable for time-series optimization
+        await conn.execute(
+            text(
+                """
+            SELECT create_hypertable('energy_price_points', 'timestamp',
                                     chunk_time_interval => INTERVAL '1 day',
                                     if_not_exists => TRUE);
         """,
@@ -502,3 +513,106 @@ class TestRepositoryIntegration:
 
         with pytest.raises(ValueError, match="must be a tuple"):
             await energy_repository.delete("invalid-key")
+
+    @pytest.mark.asyncio
+    async def test_energy_price_repository_integration(
+        self,
+        initialized_database: Database,
+        container: Container,
+    ) -> None:
+        """Test EnergyPriceRepository integration with real database operations."""
+        from decimal import Decimal
+
+        from app.models.price_data import EnergyPricePoint
+        from app.repositories.energy_price_repository import EnergyPriceRepository
+
+        # Ensure database is initialized with tables and hypertables
+        assert initialized_database is not None
+
+        # Get price repository from container
+        price_repository = container.energy_price_repository()
+        assert isinstance(price_repository, EnergyPriceRepository)
+
+        # Create test price data
+        test_time = datetime.now(UTC)
+        test_price_point = EnergyPricePoint(
+            timestamp=test_time,
+            area_code="DE-LU",
+            data_type=EnergyDataType.DAY_AHEAD,
+            business_type="A01",  # Generation
+            price_amount=Decimal("52.34"),
+            currency_unit_name="EUR",
+            price_measure_unit_name="MWH",
+            data_source="entsoe",
+            document_mrid="test-price-integration-doc",
+            revision_number=1,
+            document_created_at=test_time,
+            time_series_mrid="test-price-integration-ts",
+            resolution="PT60M",
+            curve_type="A01",
+            position=1,
+            period_start=test_time,
+            period_end=test_time + timedelta(hours=1),
+        )
+
+        # Test upsert operation
+        inserted_prices = await price_repository.upsert_batch([test_price_point])
+        assert len(inserted_prices) == 1
+        assert inserted_prices[0].price_amount == Decimal("52.34")
+        assert inserted_prices[0].area_code == "DE-LU"
+        assert inserted_prices[0].data_type == EnergyDataType.DAY_AHEAD
+
+        # Test get_all operation
+        all_prices = await price_repository.get_all()
+        assert len(all_prices) == 1
+        assert all_prices[0].price_amount == Decimal("52.34")
+
+        # Test compatibility method
+        latest_price = await price_repository.get_latest_for_area_and_type(
+            "DE-LU", EnergyDataType.DAY_AHEAD
+        )
+        assert latest_price is not None
+        assert latest_price.price_amount == Decimal("52.34")
+        assert latest_price.area_code == "DE-LU"
+
+        # Test that method works with no matching data
+        no_price = await price_repository.get_latest_for_area_and_type(
+            "FR", EnergyDataType.DAY_AHEAD
+        )
+        assert no_price is None
+
+        # Test multiple price points with different timestamps
+        future_time = test_time + timedelta(hours=2)
+        future_price_point = EnergyPricePoint(
+            timestamp=future_time,
+            area_code="DE-LU",
+            data_type=EnergyDataType.DAY_AHEAD,
+            business_type="A01",
+            price_amount=Decimal("48.91"),
+            currency_unit_name="EUR",
+            price_measure_unit_name="MWH",
+            data_source="entsoe",
+            document_mrid="test-price-integration-doc-2",
+            revision_number=1,
+            document_created_at=future_time,
+            time_series_mrid="test-price-integration-ts-2",
+            resolution="PT60M",
+            curve_type="A01",
+            position=1,
+            period_start=future_time,
+            period_end=future_time + timedelta(hours=1),
+        )
+
+        await price_repository.upsert_batch([future_price_point])
+
+        # Verify latest price is now the more recent one
+        latest_price_updated = await price_repository.get_latest_for_area_and_type(
+            "DE-LU", EnergyDataType.DAY_AHEAD
+        )
+        assert latest_price_updated is not None
+        assert latest_price_updated.price_amount == Decimal("48.91")
+        assert latest_price_updated.timestamp == future_time
+
+        # Verify we have 2 total price points
+        all_prices_updated = await price_repository.get_all()
+        assert len(all_prices_updated) == 2

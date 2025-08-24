@@ -41,7 +41,8 @@ class PublicationMarketDocument(
     )
     createdDateTime: datetime = element(tag="createdDateTime")
     periodTimeInterval: MarketTimeInterval = element(tag="period.timeInterval")
-    timeSeries: list[MarketTimeSeries]
+    # Fix: Use proper element mapping for list of TimeSeries
+    timeSeries: list[MarketTimeSeries] = element(tag="TimeSeries", default=[])
 
     @field_serializer("type")  # type: ignore[misc]
     def encode_type(self, value: DocumentType) -> str:

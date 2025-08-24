@@ -14,13 +14,20 @@ from app.exceptions.processor_exceptions import ProcessorError
 from app.exceptions.repository_exceptions import RepositoryError
 from app.models.load_data import EnergyDataPoint, EnergyDataType
 from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
+from app.processors.publication_market_document_processor import (
+    PublicationMarketDocumentProcessor,
+)
 from app.repositories.energy_data_repository import EnergyDataRepository
+from app.repositories.energy_price_repository import EnergyPriceRepository
 
 from entsoe_client.client.entsoe_client_error import EntsoEClientError
 from entsoe_client.http_client.exceptions import HttpClientError
 from entsoe_client.model.common.area_code import AreaCode
 from entsoe_client.model.common.business_type import BusinessType
 from entsoe_client.model.load.gl_market_document import GlMarketDocument
+from entsoe_client.model.market.publication_market_document import (
+    PublicationMarketDocument,
+)
 
 
 class EndpointNames(Enum):
@@ -32,6 +39,9 @@ class EndpointNames(Enum):
     MONTH_AHEAD_FORECAST = "month_ahead_forecast"
     YEAR_AHEAD_FORECAST = "year_ahead_forecast"
     FORECAST_MARGIN = "forecast_margin"
+
+    # Price endpoints
+    DAY_AHEAD_PRICES = "day_ahead_prices"
 
 
 class CollectionResult:
@@ -158,13 +168,28 @@ class EntsoEDataService:
             is_forward_looking=True,
             forecast_horizon=timedelta(days=365),
         ),
+        # Price endpoints
+        EndpointNames.DAY_AHEAD_PRICES: EndpointConfig(
+            data_type=EnergyDataType.DAY_AHEAD,  # Reuse existing enum
+            expected_interval=timedelta(hours=1),  # Hourly price updates
+            max_chunk_days=7,  # Same as load forecasts
+            rate_limit_delay=1.0,
+            is_forward_looking=False,  # Price data is historical
+        ),
     }
+
+    # Define which endpoints use price vs load processing
+    PRICE_ENDPOINTS: ClassVar[set[EndpointNames]] = {
+        EndpointNames.DAY_AHEAD_PRICES
+    }  # Expandable for future price endpoints
 
     def __init__(
         self,
         collector: EntsoeCollector,
-        processor: GlMarketDocumentProcessor,
-        repository: EnergyDataRepository,
+        load_processor: GlMarketDocumentProcessor,  # ← Load data processor
+        price_processor: PublicationMarketDocumentProcessor,  # ← Price data processor
+        load_repository: EnergyDataRepository,  # ← Load data repository
+        price_repository: EnergyPriceRepository,  # ← Price data repository
         entsoe_data_collection_config: EntsoEDataCollectionConfig,
     ) -> None:
         """
@@ -172,15 +197,35 @@ class EntsoEDataService:
 
         Args:
             collector: ENTSO-E data collector instance
-            processor: GL market document processor instance
-            repository: Energy data repository instance
+            load_processor: GL market document processor instance for load data
+            price_processor: Publication market document processor instance for price data
+            load_repository: Energy data repository instance for load data
+            price_repository: Energy price repository instance for price data
             entsoe_data_collection_config: ENTSO-E data collection configuration
         """
         self._collector = collector
-        self._processor = processor
-        self._repository = repository
+        self._load_processor = load_processor
+        self._price_processor = price_processor
+        self._load_repository = load_repository
+        self._price_repository = price_repository
         self._entsoe_data_collection_config = entsoe_data_collection_config
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    def _get_processor_for_endpoint(
+        self, endpoint: EndpointNames
+    ) -> GlMarketDocumentProcessor | PublicationMarketDocumentProcessor:
+        """Select appropriate processor based on endpoint type."""
+        if endpoint in self.PRICE_ENDPOINTS:
+            return self._price_processor
+        return self._load_processor
+
+    def _get_repository_for_endpoint(
+        self, endpoint: EndpointNames
+    ) -> EnergyDataRepository | EnergyPriceRepository:
+        """Select appropriate repository based on endpoint type."""
+        if endpoint in self.PRICE_ENDPOINTS:
+            return self._price_repository
+        return self._load_repository
 
     async def collect_gaps_for_area(
         self, area: AreaCode
@@ -294,7 +339,9 @@ class EntsoEDataService:
             config.data_type.value,
         )
 
-        gap_start, gap_end = await self._detect_gap_for_endpoint(area, config)
+        gap_start, gap_end = await self._detect_gap_for_endpoint(
+            area, endpoint_name, config
+        )
 
         if gap_start >= gap_end:
             self._logger.info(
@@ -358,6 +405,9 @@ class EntsoEDataService:
         """
         area_name = area.area_code or str(area.code)
         config = self.ENDPOINT_CONFIGS[endpoint_name]
+        repository = self._get_repository_for_endpoint(
+            endpoint_name
+        )  # ← Dynamic selection
         total_stored = 0
         no_data_chunks = 0
 
@@ -388,7 +438,33 @@ class EntsoEDataService:
                 )
 
                 if raw_document:
-                    data_points = await self._processor.process([raw_document])
+                    # Handle different document types with proper type safety
+                    if endpoint_name in self.PRICE_ENDPOINTS:
+                        # Type narrow to PublicationMarketDocument for price endpoints
+                        if isinstance(raw_document, PublicationMarketDocument):
+                            # Type is now narrowed to PublicationMarketDocument
+                            data_points = await self._price_processor.process(
+                                [raw_document]
+                            )
+                        else:
+                            self._logger.error(
+                                "Expected PublicationMarketDocument for price endpoint %s but got %s",
+                                endpoint_name.value,
+                                type(raw_document).__name__,
+                            )
+                            continue
+                    # Type narrow to GlMarketDocument for load endpoints
+                    elif isinstance(raw_document, GlMarketDocument):
+                        # Type is now narrowed to GlMarketDocument
+                        data_points = await self._load_processor.process([raw_document])
+                    else:
+                        self._logger.error(
+                            "Expected GlMarketDocument for load endpoint %s but got %s",
+                            endpoint_name.value,
+                            type(raw_document).__name__,
+                        )
+                        continue
+
                     point_count = len(data_points)
 
                     self._logger.debug(
@@ -400,7 +476,9 @@ class EntsoEDataService:
                         endpoint_name.value,
                     )
 
-                    stored_models = await self._repository.upsert_batch(data_points)
+                    stored_models = await repository.upsert_batch(
+                        data_points
+                    )  # ← Uses correct repository
                     stored_count = len(stored_models)
                     total_stored += stored_count
 
@@ -506,10 +584,15 @@ class EntsoEDataService:
             return False
 
         config = self.ENDPOINT_CONFIGS[endpoint_name]
+        repository = self._get_repository_for_endpoint(
+            endpoint_name
+        )  # ← Dynamic selection
 
-        latest_point = await self._repository.get_latest_for_area_and_type(
-            area.area_code or str(area.code),
-            config.data_type,
+        latest_point = (
+            await repository.get_latest_for_area_and_type(  # ← Use dynamic repository
+                area.area_code or str(area.code),
+                config.data_type,
+            )
         )
 
         if not latest_point:
@@ -539,7 +622,7 @@ class EntsoEDataService:
         return areas
 
     async def _detect_gap_for_endpoint(
-        self, area: AreaCode, config: EndpointConfig
+        self, area: AreaCode, endpoint_name: EndpointNames, config: EndpointConfig
     ) -> tuple[datetime, datetime]:
         """
         Identify missing data periods based on expected collection intervals.
@@ -547,16 +630,22 @@ class EntsoEDataService:
 
         Args:
             area: The area code to check
+            endpoint_name: Name of the endpoint to determine correct repository
             config: Endpoint configuration containing direction and horizon information
 
         Returns:
             Tuple of (gap_start, gap_end) datetimes
         """
         area_name = area.area_code or str(area.code)
+        repository = self._get_repository_for_endpoint(
+            endpoint_name
+        )  # ← Dynamic selection
 
-        latest_point = await self._repository.get_latest_for_area_and_type(
-            area_name,
-            config.data_type,
+        latest_point = (
+            await repository.get_latest_for_area_and_type(  # ← Use dynamic repository
+                area_name,
+                config.data_type,
+            )
         )
 
         current_time = datetime.now(UTC)
@@ -619,7 +708,7 @@ class EntsoEDataService:
         endpoint_name: EndpointNames,
         start_time: datetime,
         end_time: datetime,
-    ) -> GlMarketDocument | None:
+    ) -> GlMarketDocument | PublicationMarketDocument | None:  # ← Updated return type
         """
         Collect raw data from the appropriate collector method.
 
@@ -630,17 +719,20 @@ class EntsoEDataService:
             end_time: End of the collection period
 
         Returns:
-            Raw GL market document or None if no data
+            Raw GL market document or Publication market document or None if no data
         """
         area_name = area.area_code or str(area.code)
 
         collector_methods = {
+            # Existing load methods
             EndpointNames.ACTUAL_LOAD: self._collector.get_actual_total_load,
             EndpointNames.DAY_AHEAD_FORECAST: self._collector.get_day_ahead_load_forecast,
             EndpointNames.WEEK_AHEAD_FORECAST: self._collector.get_week_ahead_load_forecast,
             EndpointNames.MONTH_AHEAD_FORECAST: self._collector.get_month_ahead_load_forecast,
             EndpointNames.YEAR_AHEAD_FORECAST: self._collector.get_year_ahead_load_forecast,
             EndpointNames.FORECAST_MARGIN: self._collector.get_year_ahead_forecast_margin,
+            # NEW: Price method
+            EndpointNames.DAY_AHEAD_PRICES: self._collector.get_day_ahead_prices,  # ← Add this
         }
 
         if endpoint_name not in collector_methods:
@@ -661,15 +753,34 @@ class EntsoEDataService:
             bidding_zone=area,
             period_start=start_time,
             period_end=end_time,
+            offset=None,  # Add offset parameter with default None
         )
 
         if result:
-            time_series_count = len(result.timeSeries) if result.timeSeries else 0
-            point_counts = [
-                len(ts.period.points) if ts.period and ts.period.points else 0
-                for ts in (result.timeSeries or [])
-            ]
-            total_points = sum(point_counts)
+            # Handle different document types for logging
+            if hasattr(result, "timeSeries"):  # GlMarketDocument
+                time_series_count = len(result.timeSeries) if result.timeSeries else 0
+                point_counts = [
+                    len(ts.period.points) if ts.period and ts.period.points else 0
+                    for ts in (result.timeSeries or [])
+                ]
+                total_points = sum(point_counts)
+            else:  # PublicationMarketDocument - has different structure
+                # For PublicationMarketDocument, the structure may be different
+                # Use a generic approach for logging
+                time_series_count = 0
+                total_points = 0
+                # Try to access timeSeries if it exists in this document type
+                if hasattr(result, "timeSeries") and result.timeSeries:
+                    time_series_count = len(result.timeSeries)
+                    for ts in result.timeSeries:
+                        if (
+                            hasattr(ts, "period")
+                            and ts.period
+                            and hasattr(ts.period, "points")
+                            and ts.period.points
+                        ):
+                            total_points += len(ts.period.points)
 
             self._logger.debug(
                 "ENTSO-E API response received: area=%s, endpoint=%s, time_series=%d, total_points=%d",

@@ -39,13 +39,23 @@ class TestBackfillService:
         return AsyncMock()
 
     @pytest.fixture
-    def mock_processor(self) -> AsyncMock:
-        """Create a mock processor."""
+    def mock_load_processor(self) -> AsyncMock:
+        """Create a mock GL market document processor for load data."""
         return AsyncMock()
 
     @pytest.fixture
-    def mock_repository(self) -> AsyncMock:
-        """Create a mock repository."""
+    def mock_price_processor(self) -> AsyncMock:
+        """Create a mock publication market document processor for price data."""
+        return AsyncMock()
+
+    @pytest.fixture
+    def mock_load_repository(self) -> AsyncMock:
+        """Create a mock energy data repository for load data."""
+        return AsyncMock()
+
+    @pytest.fixture
+    def mock_price_repository(self) -> AsyncMock:
+        """Create a mock energy price repository for price data."""
         return AsyncMock()
 
     @pytest.fixture
@@ -90,8 +100,10 @@ class TestBackfillService:
     def backfill_service(
         self,
         mock_collector: AsyncMock,
-        mock_processor: AsyncMock,
-        mock_repository: AsyncMock,
+        mock_load_processor: AsyncMock,
+        mock_price_processor: AsyncMock,
+        mock_load_repository: AsyncMock,
+        mock_price_repository: AsyncMock,
         mock_database: AsyncMock,
         backfill_config: BackfillConfig,
         mock_progress_repository: AsyncMock,
@@ -100,8 +112,10 @@ class TestBackfillService:
         """Create a BackfillService with mocked dependencies."""
         return BackfillService(
             collector=mock_collector,
-            processor=mock_processor,
-            repository=mock_repository,
+            load_processor=mock_load_processor,
+            price_processor=mock_price_processor,
+            load_repository=mock_load_repository,
+            price_repository=mock_price_repository,
             database=mock_database,
             config=backfill_config,
             progress_repository=mock_progress_repository,
@@ -128,35 +142,102 @@ class TestBackfillService:
         """Create sample period end."""
         return datetime(2022, 3, 1, tzinfo=UTC)  # Shorter period for faster tests
 
+    # Processor and Repository Selection Tests
+
+    def test_get_processor_for_endpoint_load_data(
+        self, backfill_service: BackfillService
+    ) -> None:
+        """Test processor selection for load data endpoints."""
+        load_endpoints = [
+            "actual_load",
+            "day_ahead_forecast",
+            "week_ahead_forecast",
+            "month_ahead_forecast",
+            "year_ahead_forecast",
+            "forecast_margin",
+        ]
+
+        for endpoint in load_endpoints:
+            processor = backfill_service._get_processor_for_endpoint(endpoint)
+            assert processor == backfill_service._load_processor
+
+    def test_get_processor_for_endpoint_price_data(
+        self, backfill_service: BackfillService
+    ) -> None:
+        """Test processor selection for price data endpoints."""
+        price_endpoints = ["day_ahead_prices"]
+
+        for endpoint in price_endpoints:
+            processor = backfill_service._get_processor_for_endpoint(endpoint)
+            assert processor == backfill_service._price_processor
+
+    def test_get_repository_for_endpoint_load_data(
+        self, backfill_service: BackfillService
+    ) -> None:
+        """Test repository selection for load data endpoints."""
+        load_endpoints = [
+            "actual_load",
+            "day_ahead_forecast",
+            "week_ahead_forecast",
+            "month_ahead_forecast",
+            "year_ahead_forecast",
+            "forecast_margin",
+        ]
+
+        for endpoint in load_endpoints:
+            repository = backfill_service._get_repository_for_endpoint(endpoint)
+            assert repository == backfill_service._load_repository
+
+    def test_get_repository_for_endpoint_price_data(
+        self, backfill_service: BackfillService
+    ) -> None:
+        """Test repository selection for price data endpoints."""
+        price_endpoints = ["day_ahead_prices"]
+
+        for endpoint in price_endpoints:
+            repository = backfill_service._get_repository_for_endpoint(endpoint)
+            assert repository == backfill_service._price_repository
+
+    def test_price_endpoints_constant(self, backfill_service: BackfillService) -> None:
+        """Test that PRICE_ENDPOINTS constant is properly defined."""
+        assert hasattr(backfill_service, "PRICE_ENDPOINTS")
+        assert "day_ahead_prices" in backfill_service.PRICE_ENDPOINTS
+        assert isinstance(backfill_service.PRICE_ENDPOINTS, set)
+
     # Coverage Analysis Tests
 
     @pytest.mark.asyncio
     async def test_analyze_coverage_with_defaults(
         self,
         backfill_service: BackfillService,
-        mock_repository: AsyncMock,
+        mock_load_repository: AsyncMock,
+        mock_price_repository: AsyncMock,
     ) -> None:
         """Test coverage analysis with default parameters."""
-        # Mock repository to return some data points
-        mock_repository.get_by_time_range.return_value = [MagicMock()] * 100
+        # Mock both repositories to return some data points
+        mock_load_repository.get_by_time_range.return_value = [MagicMock()] * 100
+        mock_price_repository.get_by_time_range.return_value = [MagicMock()] * 50
 
         results = await backfill_service.analyze_coverage()
 
-        # Should analyze 2 default areas and 6 default endpoints
-        assert len(results) == 12  # 2 areas * 6 endpoints
+        # Should analyze 2 default areas and 7 default endpoints (6 load + 1 price)
+        expected_combinations = 2 * 7  # 2 areas * 7 endpoints
+        assert len(results) == expected_combinations
         assert all(isinstance(result, CoverageAnalysis) for result in results)
 
     @pytest.mark.asyncio
     async def test_analyze_coverage_with_specific_parameters(
         self,
         backfill_service: BackfillService,
-        mock_repository: AsyncMock,
+        mock_load_repository: AsyncMock,
+        mock_price_repository: AsyncMock,
         sample_areas: list[AreaCode],
         sample_endpoints: list[str],
     ) -> None:
         """Test coverage analysis with specific parameters."""
-        # Mock repository to return data points
-        mock_repository.get_by_time_range.return_value = [MagicMock()] * 50
+        # Mock repositories to return data points
+        mock_load_repository.get_by_time_range.return_value = [MagicMock()] * 50
+        mock_price_repository.get_by_time_range.return_value = [MagicMock()] * 25
 
         results = await backfill_service.analyze_coverage(
             areas=sample_areas[:2], endpoints=sample_endpoints[:2], years_back=1
@@ -165,8 +246,8 @@ class TestBackfillService:
         # Should analyze 2 areas and 2 endpoints
         assert len(results) == 4  # 2 areas * 2 endpoints
 
-        # Verify parameters passed to repository
-        call_args_list = mock_repository.get_by_time_range.call_args_list
+        # Verify parameters passed to load repository (all sample endpoints are load endpoints)
+        call_args_list = mock_load_repository.get_by_time_range.call_args_list
         assert len(call_args_list) == 4
 
         # Check that time range is approximately 1 year
@@ -176,14 +257,36 @@ class TestBackfillService:
             assert 360 <= time_diff.days <= 366  # Approximately 1 year
 
     @pytest.mark.asyncio
+    async def test_analyze_coverage_with_price_endpoints(
+        self,
+        backfill_service: BackfillService,
+        mock_price_repository: AsyncMock,
+        sample_areas: list[AreaCode],
+    ) -> None:
+        """Test coverage analysis specifically for price endpoints."""
+        # Mock price repository to return data points
+        mock_price_repository.get_by_time_range.return_value = [MagicMock()] * 75
+
+        results = await backfill_service.analyze_coverage(
+            areas=sample_areas[:1], endpoints=["day_ahead_prices"], years_back=1
+        )
+
+        assert len(results) == 1  # 1 area * 1 price endpoint
+        result = results[0]
+        assert result.endpoint_name == "day_ahead_prices"
+
+        # Verify price repository was called
+        mock_price_repository.get_by_time_range.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_analyze_coverage_empty_database(
         self,
         backfill_service: BackfillService,
-        mock_repository: AsyncMock,
+        mock_load_repository: AsyncMock,
     ) -> None:
         """Test coverage analysis with empty database."""
         # Mock repository to return no data points
-        mock_repository.get_by_time_range.return_value = []
+        mock_load_repository.get_by_time_range.return_value = []
 
         results = await backfill_service.analyze_coverage(
             areas=[AreaCode.GERMANY], endpoints=["actual_load"], years_back=1
@@ -200,11 +303,11 @@ class TestBackfillService:
     async def test_analyze_coverage_repository_error(
         self,
         backfill_service: BackfillService,
-        mock_repository: AsyncMock,
+        mock_load_repository: AsyncMock,
     ) -> None:
         """Test coverage analysis with repository error."""
         # Mock repository to raise an exception
-        mock_repository.get_by_time_range.side_effect = Exception("Database error")
+        mock_load_repository.get_by_time_range.side_effect = Exception("Database error")
 
         with pytest.raises(BackfillCoverageError) as exc_info:
             await backfill_service.analyze_coverage(
@@ -223,8 +326,8 @@ class TestBackfillService:
         self,
         backfill_service: BackfillService,
         mock_collector: AsyncMock,
-        mock_processor: AsyncMock,
-        mock_repository: AsyncMock,
+        mock_load_processor: AsyncMock,
+        mock_load_repository: AsyncMock,
         sample_period_start: datetime,
         sample_period_end: datetime,
     ) -> None:
@@ -235,10 +338,10 @@ class TestBackfillService:
 
         # Mock processor to return data points
         mock_data_points = [MagicMock()] * 10
-        mock_processor.process.return_value = mock_data_points
+        mock_load_processor.process.return_value = mock_data_points
 
         # Mock repository for upsert
-        mock_repository.upsert_batch.return_value = mock_data_points
+        mock_load_repository.upsert_batch.return_value = mock_data_points
 
         # Mock the _collect_chunk_data method to return a valid data point count
         async def mock_collect_chunk_data(*_args: Any, **_kwargs: Any) -> int:
@@ -262,6 +365,49 @@ class TestBackfillService:
         assert result.data_points_collected > 0
         assert result.chunks_processed > 0
         assert result.chunks_failed == 0
+
+    @pytest.mark.asyncio
+    async def test_start_backfill_success_with_price_endpoint(
+        self,
+        backfill_service: BackfillService,
+        mock_collector: AsyncMock,
+        mock_price_processor: AsyncMock,
+        mock_price_repository: AsyncMock,
+        sample_period_start: datetime,
+        sample_period_end: datetime,
+    ) -> None:
+        """Test successful backfill operation with price endpoint."""
+        # Mock collector to return documents for price data
+        mock_document = MagicMock()
+        mock_collector.get_day_ahead_prices.return_value = mock_document
+
+        # Mock price processor to return data points
+        mock_data_points = [MagicMock()] * 10
+        mock_price_processor.process.return_value = mock_data_points
+
+        # Mock price repository for upsert
+        mock_price_repository.upsert_batch.return_value = mock_data_points
+
+        result = await backfill_service.start_backfill(
+            area_code="DE",
+            endpoint_name="day_ahead_prices",  # Price endpoint
+            period_start=sample_period_start,
+            period_end=sample_period_end,
+            chunk_size_days=30,
+        )
+
+        assert isinstance(result, BackfillResult)
+        assert result.success is True
+        assert result.area_code == "DE"
+        assert result.endpoint_name == "day_ahead_prices"
+        assert result.data_points_collected > 0
+        assert result.chunks_processed > 0
+        assert result.chunks_failed == 0
+
+        # Verify price-specific components were used
+        mock_collector.get_day_ahead_prices.assert_called()
+        mock_price_processor.process.assert_called()
+        mock_price_repository.upsert_batch.assert_called()
 
     @pytest.mark.asyncio
     async def test_start_backfill_resource_limit_exceeded(
@@ -317,6 +463,43 @@ class TestBackfillService:
         assert result.chunks_failed > 0
         assert len(result.error_messages) > 0
 
+    # Collector Method Selection Tests
+
+    def test_get_collector_method_load_endpoints(
+        self, backfill_service: BackfillService, mock_collector: AsyncMock
+    ) -> None:
+        """Test collector method selection for load data endpoints."""
+        endpoint_to_method = {
+            "actual_load": mock_collector.get_actual_total_load,
+            "day_ahead_forecast": mock_collector.get_day_ahead_load_forecast,
+            "week_ahead_forecast": mock_collector.get_week_ahead_load_forecast,
+            "month_ahead_forecast": mock_collector.get_month_ahead_load_forecast,
+            "year_ahead_forecast": mock_collector.get_year_ahead_load_forecast,
+            "forecast_margin": mock_collector.get_year_ahead_forecast_margin,
+        }
+
+        for endpoint, expected_method in endpoint_to_method.items():
+            method = backfill_service._get_collector_method(endpoint)
+            assert method == expected_method
+
+    def test_get_collector_method_price_endpoints(
+        self, backfill_service: BackfillService, mock_collector: AsyncMock
+    ) -> None:
+        """Test collector method selection for price data endpoints."""
+        method = backfill_service._get_collector_method("day_ahead_prices")
+        assert method == mock_collector.get_day_ahead_prices
+
+    def test_get_collector_method_unknown_endpoint(
+        self, backfill_service: BackfillService
+    ) -> None:
+        """Test collector method selection with unknown endpoint."""
+        with pytest.raises(
+            ValueError, match="Unknown endpoint name: unknown_endpoint"
+        ) as exc_info:
+            backfill_service._get_collector_method("unknown_endpoint")
+
+        assert "Unknown endpoint name: unknown_endpoint" in str(exc_info.value)
+
     # Resume Backfill Tests
 
     @pytest.mark.asyncio
@@ -324,8 +507,8 @@ class TestBackfillService:
         self,
         backfill_service: BackfillService,
         mock_collector: AsyncMock,
-        mock_processor: AsyncMock,
-        mock_repository: AsyncMock,
+        mock_load_processor: AsyncMock,
+        mock_load_repository: AsyncMock,
         mock_progress_repository: AsyncMock,
     ) -> None:
         """Test successful backfill resume operation."""
@@ -350,8 +533,8 @@ class TestBackfillService:
 
         # Mock collector and processor
         mock_collector.get_actual_total_load.return_value = MagicMock()
-        mock_processor.process.return_value = [MagicMock()] * 5
-        mock_repository.upsert_batch.return_value = [MagicMock()] * 5
+        mock_load_processor.process.return_value = [MagicMock()] * 5
+        mock_load_repository.upsert_batch.return_value = [MagicMock()] * 5
 
         # Mock the _collect_chunk_data method to return a valid data point count
         async def mock_collect_chunk_data(*_args: Any, **_kwargs: Any) -> int:

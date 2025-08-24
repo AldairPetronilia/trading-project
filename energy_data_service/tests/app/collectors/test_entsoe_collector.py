@@ -7,6 +7,9 @@ from app.collectors.entsoe_collector import EntsoeCollector
 from entsoe_client.client.entsoe_client import EntsoEClient
 from entsoe_client.model.common.area_code import AreaCode
 from entsoe_client.model.load.gl_market_document import GlMarketDocument
+from entsoe_client.model.market.publication_market_document import (
+    PublicationMarketDocument,
+)
 
 
 class TestEntsoeCollector:
@@ -41,6 +44,11 @@ class TestEntsoeCollector:
     def mock_gl_market_document(self) -> AsyncMock:
         """Create a mock GlMarketDocument."""
         return AsyncMock(spec=GlMarketDocument)
+
+    @pytest.fixture
+    def mock_publication_market_document(self) -> AsyncMock:
+        """Mock PublicationMarketDocument for price data testing."""
+        return AsyncMock(spec=PublicationMarketDocument)
 
     @pytest.mark.asyncio
     async def test_get_actual_total_load_delegates_to_client(
@@ -275,6 +283,96 @@ class TestEntsoeCollector:
             offset=None,
         )
         assert result == mock_gl_market_document
+
+    @pytest.mark.asyncio
+    async def test_get_day_ahead_prices_delegates_to_client(
+        self,
+        entsoe_collector: EntsoeCollector,
+        mock_entsoe_client: AsyncMock,
+        sample_bidding_zone: AreaCode,
+        sample_period_start: datetime,
+        sample_period_end: datetime,
+        mock_publication_market_document: AsyncMock,
+    ) -> None:
+        """Test that get_day_ahead_prices properly delegates to entsoe_client."""
+        mock_entsoe_client.get_day_ahead_prices.return_value = (
+            mock_publication_market_document
+        )
+
+        result = await entsoe_collector.get_day_ahead_prices(
+            bidding_zone=sample_bidding_zone,
+            period_start=sample_period_start,
+            period_end=sample_period_end,
+            offset=None,
+        )
+
+        mock_entsoe_client.get_day_ahead_prices.assert_called_once_with(
+            in_domain=sample_bidding_zone,
+            out_domain=sample_bidding_zone,  # For day-ahead prices, in_domain == out_domain
+            period_start=sample_period_start,
+            period_end=sample_period_end,
+            offset=None,
+        )
+        assert result == mock_publication_market_document
+
+    @pytest.mark.asyncio
+    async def test_get_day_ahead_prices_returns_none_when_no_data(
+        self,
+        entsoe_collector: EntsoeCollector,
+        mock_entsoe_client: AsyncMock,
+        sample_bidding_zone: AreaCode,
+        sample_period_start: datetime,
+        sample_period_end: datetime,
+    ) -> None:
+        """Test that get_day_ahead_prices returns None when client returns None."""
+        mock_entsoe_client.get_day_ahead_prices.return_value = None
+
+        result = await entsoe_collector.get_day_ahead_prices(
+            bidding_zone=sample_bidding_zone,
+            period_start=sample_period_start,
+            period_end=sample_period_end,
+        )
+
+        mock_entsoe_client.get_day_ahead_prices.assert_called_once_with(
+            in_domain=sample_bidding_zone,
+            out_domain=sample_bidding_zone,
+            period_start=sample_period_start,
+            period_end=sample_period_end,
+            offset=None,
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_day_ahead_prices_with_offset(
+        self,
+        entsoe_collector: EntsoeCollector,
+        mock_entsoe_client: AsyncMock,
+        sample_bidding_zone: AreaCode,
+        sample_period_start: datetime,
+        sample_period_end: datetime,
+        mock_publication_market_document: AsyncMock,
+    ) -> None:
+        """Test that get_day_ahead_prices passes offset parameter to client."""
+        offset = 100
+        mock_entsoe_client.get_day_ahead_prices.return_value = (
+            mock_publication_market_document
+        )
+
+        result = await entsoe_collector.get_day_ahead_prices(
+            bidding_zone=sample_bidding_zone,
+            period_start=sample_period_start,
+            period_end=sample_period_end,
+            offset=offset,
+        )
+
+        mock_entsoe_client.get_day_ahead_prices.assert_called_once_with(
+            in_domain=sample_bidding_zone,
+            out_domain=sample_bidding_zone,
+            period_start=sample_period_start,
+            period_end=sample_period_end,
+            offset=offset,
+        )
+        assert result == mock_publication_market_document
 
     @pytest.mark.asyncio
     async def test_health_check_returns_true_by_default(

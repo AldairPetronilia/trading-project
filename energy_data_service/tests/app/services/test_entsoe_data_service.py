@@ -34,12 +34,24 @@ def mock_processor() -> AsyncMock:
 
 
 @pytest.fixture
+def mock_price_processor() -> AsyncMock:
+    """Fixture for a mocked PublicationMarketDocumentProcessor."""
+    return AsyncMock()
+
+
+@pytest.fixture
 def mock_repository() -> AsyncMock:
     """Fixture for a mocked EnergyDataRepository."""
     mock = AsyncMock()
     # Make the mock iterable for the all() call in collect_all_gaps
     mock.__iter__ = MagicMock(return_value=iter([AreaCode.DE_LU, AreaCode.DE_AT_LU]))
     return mock
+
+
+@pytest.fixture
+def mock_price_repository() -> AsyncMock:
+    """Fixture for a mocked EnergyPriceRepository."""
+    return AsyncMock()
 
 
 @pytest.fixture
@@ -52,12 +64,19 @@ def entsoe_data_collection_config() -> EntsoEDataCollectionConfig:
 def entsoe_data_service(
     mock_collector: AsyncMock,
     mock_processor: AsyncMock,
+    mock_price_processor: AsyncMock,
     mock_repository: AsyncMock,
+    mock_price_repository: AsyncMock,
     entsoe_data_collection_config: EntsoEDataCollectionConfig,
 ) -> EntsoEDataService:
     """Fixture for an EntsoEDataService instance with mocked dependencies."""
     return EntsoEDataService(
-        mock_collector, mock_processor, mock_repository, entsoe_data_collection_config
+        collector=mock_collector,
+        load_processor=mock_processor,  # ← Load data processor
+        price_processor=mock_price_processor,  # ← Price data processor
+        load_repository=mock_repository,  # ← Load data repository
+        price_repository=mock_price_repository,  # ← Price data repository
+        entsoe_data_collection_config=entsoe_data_collection_config,
     )
 
 
@@ -148,6 +167,7 @@ class TestEntsoEDataServiceConfiguration:
             EndpointNames.MONTH_AHEAD_FORECAST,
             EndpointNames.YEAR_AHEAD_FORECAST,
             EndpointNames.FORECAST_MARGIN,
+            EndpointNames.DAY_AHEAD_PRICES,  # Add the new price endpoint
         }
         assert set(configs.keys()) == expected_endpoints
 
@@ -236,7 +256,7 @@ class TestDetectGapForEndpointNewBehavior:
 
         # Execute
         gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
-            area, config
+            area, EndpointNames.ACTUAL_LOAD, config
         )
 
         # Verify
@@ -271,7 +291,7 @@ class TestDetectGapForEndpointNewBehavior:
 
         # Execute
         gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
-            area, config
+            area, EndpointNames.ACTUAL_LOAD, config
         )
 
         # Verify
@@ -299,7 +319,7 @@ class TestDetectGapForEndpointNewBehavior:
 
         # Execute
         gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
-            area, config
+            area, EndpointNames.DAY_AHEAD_FORECAST, config
         )
 
         # Verify
@@ -333,7 +353,7 @@ class TestDetectGapForEndpointNewBehavior:
 
         # Execute
         gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
-            area, config
+            area, EndpointNames.DAY_AHEAD_FORECAST, config
         )
 
         # Verify
@@ -371,7 +391,7 @@ class TestDetectGapForEndpointNewBehavior:
             )
 
             gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
-                area, config
+                area, EndpointNames.DAY_AHEAD_FORECAST, config
             )
 
             actual_horizon = gap_end - gap_start
@@ -395,9 +415,20 @@ class TestEntsoEDataService:
         )
 
         # We patch collect_with_chunking because its logic is tested separately
-        with patch.object(
-            entsoe_data_service, "collect_with_chunking", new_callable=AsyncMock
-        ) as mock_collect_chunking:
+        with (
+            patch.object(
+                entsoe_data_service, "collect_with_chunking", new_callable=AsyncMock
+            ) as mock_collect_chunking,
+            patch.object(
+                entsoe_data_service, "_detect_gap_for_endpoint", new_callable=AsyncMock
+            ) as mock_detect_gap,
+        ):
+            # Make gap detection return a valid time range
+            now = datetime.now(UTC)
+            gap_start = now - timedelta(days=1)
+            gap_end = now
+            mock_detect_gap.return_value = (gap_start, gap_end)
+
             # Simulate a successful collection result
             result = CollectionResult(
                 area=AreaCode.GERMANY,
@@ -658,12 +689,16 @@ class TestEntsoEDataService:
         """
         Test collect_with_chunking when some chunks return data and others return None.
         """
+        from entsoe_client.model.load.gl_market_document import GlMarketDocument
+
         start_time = datetime(2024, 1, 1, tzinfo=UTC)
         end_time = start_time + timedelta(days=6)  # 6 days = 2 chunks (3 days each)
         endpoint_name = EndpointNames.ACTUAL_LOAD
 
         # Mock GL market document for successful chunks
-        mock_gl_doc = Mock()
+        mock_gl_doc = MagicMock(spec=GlMarketDocument)
+        # Make isinstance check pass
+        mock_gl_doc.__class__ = GlMarketDocument
         mock_gl_doc.timeSeries = [Mock()]
         mock_gl_doc.timeSeries[0].period = Mock()
         mock_gl_doc.timeSeries[0].period.points = [Mock(), Mock()]
@@ -804,7 +839,7 @@ class TestEntsoEDataService:
         mock_repository.get_latest_for_area_and_type.return_value = latest_point
 
         gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
-            AreaCode.GERMANY, config
+            AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD, config
         )
 
         assert gap_start == latest_timestamp + config.expected_interval
@@ -821,7 +856,7 @@ class TestEntsoEDataService:
         mock_repository.get_latest_for_area_and_type.return_value = None
 
         gap_start, gap_end = await entsoe_data_service._detect_gap_for_endpoint(
-            AreaCode.GERMANY, config
+            AreaCode.GERMANY, EndpointNames.ACTUAL_LOAD, config
         )
 
         # Should default to the last 7 days
@@ -863,7 +898,148 @@ class TestEntsoEDataService:
             bidding_zone=area,
             period_start=start_time,
             period_end=end_time,
+            offset=None,  # Now includes offset parameter
         )
+
+    @pytest.mark.asyncio
+    async def test_day_ahead_prices_endpoint_integration(
+        self,
+        entsoe_data_service: EntsoEDataService,
+        mock_collector: AsyncMock,
+        mock_price_processor: AsyncMock,
+        mock_price_repository: AsyncMock,
+    ) -> None:
+        """Test complete DAY_AHEAD_PRICES endpoint integration."""
+        from entsoe_client.model.market.publication_market_document import (
+            PublicationMarketDocument,
+        )
+
+        # Setup mocks - use MagicMock which can be made to pass isinstance checks
+        mock_publication_document = MagicMock(spec=PublicationMarketDocument)
+        # Make isinstance check pass
+        mock_publication_document.__class__ = PublicationMarketDocument
+        mock_collector.get_day_ahead_prices.return_value = mock_publication_document
+
+        processed_points = [Mock(), Mock()]
+        mock_price_processor.process.return_value = processed_points
+        mock_price_repository.upsert_batch.return_value = (
+            processed_points  # Repository returns what was stored
+        )
+
+        # Test data collection
+        area = AreaCode.DE_LU
+        start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end_time = datetime(2024, 1, 2, 0, 0, 0, tzinfo=UTC)
+
+        result = await entsoe_data_service.collect_with_chunking(
+            area=area,
+            endpoint_name=EndpointNames.DAY_AHEAD_PRICES,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+        # Verify collector was called correctly
+        mock_collector.get_day_ahead_prices.assert_called_once_with(
+            bidding_zone=area,
+            period_start=start_time,
+            period_end=end_time,
+            offset=None,
+        )
+
+        # Verify price processor was used
+        mock_price_processor.process.assert_called_once_with(
+            [mock_publication_document]
+        )
+
+        # Verify price repository was used
+        mock_price_repository.upsert_batch.assert_called_once_with(processed_points)
+
+        # Verify result
+        assert result.success is True
+        assert result.stored_count == len(processed_points)
+
+    @pytest.mark.asyncio
+    async def test_day_ahead_prices_factory_methods(
+        self,
+        entsoe_data_service: EntsoEDataService,
+        mock_price_processor: AsyncMock,
+        mock_price_repository: AsyncMock,
+    ) -> None:
+        """Test that factory methods return correct processor and repository for prices."""
+        # Test processor factory
+        processor = entsoe_data_service._get_processor_for_endpoint(
+            EndpointNames.DAY_AHEAD_PRICES
+        )
+        assert processor is mock_price_processor
+
+        # Test repository factory
+        repository = entsoe_data_service._get_repository_for_endpoint(
+            EndpointNames.DAY_AHEAD_PRICES
+        )
+        assert repository is mock_price_repository
+
+    @pytest.mark.asyncio
+    async def test_day_ahead_prices_vs_load_endpoint_differentiation(
+        self,
+        entsoe_data_service: EntsoEDataService,
+        mock_processor: AsyncMock,
+        mock_price_processor: AsyncMock,
+        mock_repository: AsyncMock,
+        mock_price_repository: AsyncMock,
+    ) -> None:
+        """Test that load endpoints use load processor/repository and price endpoints use price processor/repository."""
+        # Test load endpoint
+        load_processor = entsoe_data_service._get_processor_for_endpoint(
+            EndpointNames.ACTUAL_LOAD
+        )
+        load_repository = entsoe_data_service._get_repository_for_endpoint(
+            EndpointNames.ACTUAL_LOAD
+        )
+        assert load_processor is mock_processor
+        assert load_repository is mock_repository
+
+        # Test price endpoint
+        price_processor = entsoe_data_service._get_processor_for_endpoint(
+            EndpointNames.DAY_AHEAD_PRICES
+        )
+        price_repository = entsoe_data_service._get_repository_for_endpoint(
+            EndpointNames.DAY_AHEAD_PRICES
+        )
+        assert price_processor is mock_price_processor
+        assert price_repository is mock_price_repository
+
+    @pytest.mark.asyncio
+    async def test_day_ahead_prices_collect_with_chunking_no_data(
+        self,
+        entsoe_data_service: EntsoEDataService,
+        mock_collector: AsyncMock,
+    ) -> None:
+        """Test DAY_AHEAD_PRICES endpoint when collector returns None."""
+        # Setup: collector returns None (no data)
+        mock_collector.get_day_ahead_prices.return_value = None
+
+        area = AreaCode.DE_LU
+        start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end_time = datetime(2024, 1, 2, 0, 0, 0, tzinfo=UTC)
+
+        result = await entsoe_data_service.collect_with_chunking(
+            area=area,
+            endpoint_name=EndpointNames.DAY_AHEAD_PRICES,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+        # Verify collector was called
+        mock_collector.get_day_ahead_prices.assert_called_once_with(
+            bidding_zone=area,
+            period_start=start_time,
+            period_end=end_time,
+            offset=None,
+        )
+
+        # Verify result indicates no data
+        assert result.success is True
+        assert result.stored_count == 0
 
     @pytest.mark.parametrize(
         ("start_time", "end_time", "max_chunk_days", "expected_chunks"),
