@@ -172,6 +172,8 @@ class TestPublicationMarketDocumentProcessor:
         assert len(result) == 1
         price_point = result[0]
         assert isinstance(price_point, EnergyPricePoint)
+
+        # Test basic price and market data
         assert price_point.price_amount == Decimal("45.67")
         assert price_point.currency_unit_name == "EUR"
         assert price_point.price_measure_unit_name == "EUR/MWh"
@@ -180,6 +182,56 @@ class TestPublicationMarketDocumentProcessor:
         assert price_point.business_type == "A62"
         assert price_point.auction_type == "A01"
         assert price_point.contract_market_agreement_type == "A01"
+
+        # Test required database fields (nullable=False)
+        assert price_point.document_mrid == sample_publication_market_document.mRID
+        assert (
+            price_point.time_series_mrid
+            == sample_publication_market_document.timeSeries[0].mRID
+        )
+        assert price_point.resolution == "PT60M"
+        assert (
+            price_point.document_created_at
+            == sample_publication_market_document.createdDateTime
+        )
+        assert price_point.position == 1  # First point position
+        assert price_point.period_start == datetime(2024, 1, 1, 0, 0, tzinfo=UTC)
+        assert price_point.period_end == datetime(2024, 1, 2, 0, 0, tzinfo=UTC)
+
+    async def test_process_validates_all_required_database_fields(
+        self,
+        processor: PublicationMarketDocumentProcessor,
+        sample_publication_market_document: PublicationMarketDocument,
+    ) -> None:
+        """Test that all required database fields (nullable=False) are properly populated."""
+        result = await processor.process([sample_publication_market_document])
+
+        assert len(result) == 1
+        price_point = result[0]
+
+        # These fields caused the original database constraint violation bug
+        # Ensure they are all populated (not None) and have correct values
+        required_fields = [
+            ("document_mrid", sample_publication_market_document.mRID),
+            ("time_series_mrid", sample_publication_market_document.timeSeries[0].mRID),
+            ("resolution", "PT60M"),
+            ("document_created_at", sample_publication_market_document.createdDateTime),
+            ("position", 1),
+            ("period_start", datetime(2024, 1, 1, 0, 0, tzinfo=UTC)),
+            ("period_end", datetime(2024, 1, 2, 0, 0, tzinfo=UTC)),
+        ]
+
+        for field_name, expected_value in required_fields:
+            actual_value = getattr(price_point, field_name)
+            assert actual_value is not None, (
+                f"Required field '{field_name}' is None (nullable=False constraint violation)"
+            )
+            assert actual_value == expected_value, (
+                f"Field '{field_name}' has incorrect value: {actual_value} != {expected_value}"
+            )
+
+        # Verify these are the exact fields that were missing in the original bug
+        # All 7 required database fields are properly populated
 
     async def test_process_multiple_documents_success(
         self,

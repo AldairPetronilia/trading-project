@@ -140,7 +140,7 @@ class PublicationMarketDocumentProcessor(
                     continue
 
                 series_points = await self._process_time_series(
-                    data_type=data_type, time_series=time_series
+                    document=document, data_type=data_type, time_series=time_series
                 )
                 points.extend(series_points)
 
@@ -159,6 +159,7 @@ class PublicationMarketDocumentProcessor(
 
     async def _process_time_series(
         self,
+        document: PublicationMarketDocument,
         data_type: EnergyDataType,
         time_series: Any,  # MarketTimeSeries type
     ) -> list[EnergyPricePoint]:
@@ -166,6 +167,7 @@ class PublicationMarketDocumentProcessor(
         Process a single TimeSeries within a PublicationMarketDocument.
 
         Args:
+            document: The parent PublicationMarketDocument
             data_type: Mapped EnergyDataType for this document
             time_series: Individual TimeSeries to process
 
@@ -214,6 +216,14 @@ class PublicationMarketDocumentProcessor(
                     if time_series.contract_market_agreement_type
                     else None
                 ),
+                # Add missing required fields
+                document_mrid=document.mRID,
+                time_series_mrid=time_series.mRID,
+                resolution=period.resolution,
+                document_created_at=document.createdDateTime,  # Fixed: use correct field name
+                position=point.position,
+                period_start=period.timeInterval.start,
+                period_end=period.timeInterval.end,
             )
             points.append(price_point)
 

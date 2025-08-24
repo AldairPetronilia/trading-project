@@ -53,12 +53,19 @@ if TYPE_CHECKING:
     from app.processors.gl_market_document_processor import (
         GlMarketDocumentProcessor,
     )
+    from app.processors.publication_market_document_processor import (
+        PublicationMarketDocumentProcessor,
+    )
     from app.repositories.backfill_progress_repository import (
         BackfillProgressRepository,
     )
     from app.repositories.energy_data_repository import (
         EnergyDataRepository,
     )
+    from app.repositories.energy_price_repository import (
+        EnergyPriceRepository,
+    )
+    from app.services.entsoe_data_service import EndpointNames
 
 # Set up logging
 log = logging.getLogger(__name__)
@@ -207,13 +214,19 @@ class BackfillService:
         "month_ahead_forecast": 60,  # 1-hour intervals
         "year_ahead_forecast": 60,  # 1-hour intervals
         "forecast_margin": 60,  # 1-hour intervals
+        "day_ahead_prices": 60,  # 1-hour intervals (price data)
     }
+
+    # Price endpoints that use different processor/repository
+    PRICE_ENDPOINTS: ClassVar[set[str]] = {"day_ahead_prices"}
 
     def __init__(
         self,
         collector: EntsoeCollector,
-        processor: GlMarketDocumentProcessor,
-        repository: EnergyDataRepository,
+        load_processor: GlMarketDocumentProcessor,  # ← Load data processor
+        price_processor: PublicationMarketDocumentProcessor,  # ← Price data processor
+        load_repository: EnergyDataRepository,  # ← Load data repository
+        price_repository: EnergyPriceRepository,  # ← Price data repository
         database: Database,
         config: BackfillConfig,
         progress_repository: BackfillProgressRepository,
@@ -224,21 +237,41 @@ class BackfillService:
 
         Args:
             collector: ENTSO-E data collector instance
-            processor: GL market document processor instance
-            repository: Energy data repository instance
+            load_processor: GL market document processor instance for load data
+            price_processor: Publication market document processor instance for price data
+            load_repository: Energy data repository instance for load data
+            price_repository: Energy price repository instance for price data
             database: Database instance for session management
             config: Backfill configuration settings
             progress_repository: Repository for backfill progress operations
             entsoe_data_collection_config: ENTSO-E data collection configuration
         """
         self._collector = collector
-        self._processor = processor
-        self._repository = repository
+        self._load_processor = load_processor
+        self._price_processor = price_processor
+        self._load_repository = load_repository
+        self._price_repository = price_repository
         self._database = database
         self._config = config
         self._progress_repository = progress_repository
         self._entsoe_data_collection_config = entsoe_data_collection_config
         self._active_operations: dict[str, BackfillProgress] = {}
+
+    def _get_processor_for_endpoint(
+        self, endpoint_name: str
+    ) -> GlMarketDocumentProcessor | PublicationMarketDocumentProcessor:
+        """Select appropriate processor based on endpoint type."""
+        if endpoint_name in self.PRICE_ENDPOINTS:
+            return self._price_processor
+        return self._load_processor
+
+    def _get_repository_for_endpoint(
+        self, endpoint_name: str
+    ) -> EnergyDataRepository | EnergyPriceRepository:
+        """Select appropriate repository based on endpoint type."""
+        if endpoint_name in self.PRICE_ENDPOINTS:
+            return self._price_repository
+        return self._load_repository
 
     async def analyze_coverage(
         self,
@@ -622,8 +655,7 @@ class BackfillService:
             total_minutes = int((end_time - start_time).total_seconds() / 60)
             expected_points = total_minutes // interval_minutes
 
-            # Query actual data points from database
-            # Map endpoint name to EnergyDataType
+            # Map endpoint name to EnergyDataType - updated to include price endpoints
             data_type_mapping = {
                 "actual_load": "actual",
                 "day_ahead_forecast": "day_ahead",
@@ -631,17 +663,21 @@ class BackfillService:
                 "month_ahead_forecast": "month_ahead",
                 "year_ahead_forecast": "year_ahead",
                 "forecast_margin": "forecast_margin",
+                "day_ahead_prices": "day_ahead",  # ← Add price endpoint mapping
             }
 
             data_type = data_type_mapping.get(endpoint_name)
             if not data_type:
                 self._raise_unknown_endpoint_error(endpoint_name)
 
-            # Query database for actual data points
             # Convert string to enum
             data_type_enum = EnergyDataType(data_type)
 
-            data_points = await self._repository.get_by_time_range(
+            # Use dynamic repository selection instead of hardcoded self._repository
+            repository = self._get_repository_for_endpoint(endpoint_name)
+
+            # Query database for actual data points
+            data_points = await repository.get_by_time_range(
                 start_time=start_time,
                 end_time=end_time,
                 area_codes=[area_code],
@@ -962,7 +998,9 @@ class BackfillService:
     def _get_area_from_code(self, area_code: str) -> AreaCode:  # noqa: RET503
         """Get AreaCode enum from area code string."""
         for area_enum in AreaCode:
-            if area_enum.get_country_code() == area_code:
+            if (
+                area_enum.area_code == area_code
+            ):  # ← Use area_code instead of deprecated get_country_code()
                 return area_enum
         self._raise_invalid_area_error(area_code)
 
@@ -975,6 +1013,7 @@ class BackfillService:
             "month_ahead_forecast": self._collector.get_month_ahead_load_forecast,
             "year_ahead_forecast": self._collector.get_year_ahead_load_forecast,
             "forecast_margin": self._collector.get_year_ahead_forecast_margin,
+            "day_ahead_prices": self._collector.get_day_ahead_prices,  # ← Add price endpoint
         }
 
         collector_method = collector_methods.get(endpoint_name)
@@ -987,7 +1026,9 @@ class BackfillService:
     ) -> list[Any]:
         """Process raw document and store in database."""
         try:
-            data_points = await self._processor.process([raw_document])
+            # Use dynamic processor selection
+            processor = self._get_processor_for_endpoint(endpoint_name)
+            data_points = await processor.process([raw_document])
         except Exception as e:
             raise BackfillError(
                 message=f"Processing failed: {e}",
@@ -996,9 +1037,10 @@ class BackfillService:
                 operation="process_chunk",
             ) from e
 
-        # Store in database
+        # Store in database using dynamic repository selection
         if data_points:
-            await self._repository.upsert_batch(data_points)
+            repository = self._get_repository_for_endpoint(endpoint_name)
+            await repository.upsert_batch(data_points)
 
         return data_points
 

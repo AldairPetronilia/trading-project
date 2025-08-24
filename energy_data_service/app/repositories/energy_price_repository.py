@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -205,7 +206,7 @@ class EnergyPriceRepository(BaseRepository[EnergyPricePoint]):
         """
         return await self.delete((timestamp, area_code, data_type, business_type))
 
-    async def get_prices_by_time_range(
+    async def get_by_time_range(
         self,
         start_time: datetime,
         end_time: datetime,
@@ -267,7 +268,7 @@ class EnergyPriceRepository(BaseRepository[EnergyPricePoint]):
                 raise DataAccessError(
                     error_msg,
                     model_type="EnergyPricePoint",
-                    operation="get_prices_by_time_range",
+                    operation="get_by_time_range",
                     context={
                         "start_time": start_time.isoformat(),
                         "end_time": end_time.isoformat(),
@@ -284,6 +285,32 @@ class EnergyPriceRepository(BaseRepository[EnergyPricePoint]):
                         else 0,
                     },
                 ) from e
+
+    async def get_prices_by_time_range(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        area_codes: list[str] | None = None,
+        data_types: list[EnergyDataType] | None = None,
+        currency_units: list[str] | None = None,
+        auction_types: list[str] | None = None,
+        business_types: list[str] | None = None,
+    ) -> list[EnergyPricePoint]:
+        """Deprecated: Use get_by_time_range instead for consistency with other repositories."""
+        warnings.warn(
+            "get_prices_by_time_range is deprecated. Use get_by_time_range instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return await self.get_by_time_range(
+            start_time=start_time,
+            end_time=end_time,
+            area_codes=area_codes,
+            data_types=data_types,
+            currency_units=currency_units,
+            auction_types=auction_types,
+            business_types=business_types,
+        )
 
     async def get_latest_price_for_area(
         self,

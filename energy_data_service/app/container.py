@@ -92,8 +92,10 @@ class Container(containers.DeclarativeContainer):
     backfill_service: providers.Factory[BackfillService] = providers.Factory(
         BackfillService,
         collector=entsoe_collector,
-        processor=gl_market_document_processor,
-        repository=energy_data_repository,
+        load_processor=gl_market_document_processor,  # ← Load data processor
+        price_processor=publication_market_document_processor,  # ← Price data processor
+        load_repository=energy_data_repository,  # ← Load data repository
+        price_repository=energy_price_repository,  # ← Price data repository
         database=database,
         config=providers.Callable(lambda c: c.backfill, config),
         progress_repository=backfill_progress_repository,
