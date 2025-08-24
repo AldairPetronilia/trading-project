@@ -385,6 +385,28 @@ class EnergyPriceRepository(BaseRepository[EnergyPricePoint]):
                     },
                 ) from e
 
+    async def get_latest_for_area_and_type(
+        self,
+        area_code: str,
+        data_type: EnergyDataType,
+    ) -> EnergyPricePoint | None:
+        """Compatibility method that delegates to get_latest_price_for_area_and_type.
+
+        This method provides the same interface as EnergyDataRepository to allow
+        unified repository usage in EntsoEDataService.
+
+        Args:
+            area_code: The area code to filter by
+            data_type: The energy data type to filter by
+
+        Returns:
+            The most recent energy price point if found, None otherwise
+
+        Raises:
+            DataAccessError: If the database operation fails
+        """
+        return await self.get_latest_price_for_area_and_type(area_code, data_type)
+
     async def get_prices_by_currency(
         self,
         currency_unit: str,

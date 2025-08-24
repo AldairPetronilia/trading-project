@@ -4,6 +4,9 @@ from app.collectors.entsoe_collector import EntsoeCollector
 from app.config.database import Database
 from app.config.settings import BackfillConfig, Settings
 from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
+from app.processors.publication_market_document_processor import (
+    PublicationMarketDocumentProcessor,
+)
 from app.repositories.backfill_progress_repository import BackfillProgressRepository
 from app.repositories.energy_data_repository import EnergyDataRepository
 from app.repositories.energy_price_repository import EnergyPriceRepository
@@ -68,11 +71,19 @@ class Container(containers.DeclarativeContainer):
         )
     )
 
+    publication_market_document_processor: providers.Factory[
+        PublicationMarketDocumentProcessor
+    ] = providers.Factory(
+        PublicationMarketDocumentProcessor,
+    )
+
     entsoe_data_service: providers.Factory[EntsoEDataService] = providers.Factory(
         EntsoEDataService,
         collector=entsoe_collector,
-        processor=gl_market_document_processor,
-        repository=energy_data_repository,
+        load_processor=gl_market_document_processor,  # ← Load data processor
+        price_processor=publication_market_document_processor,  # ← Price data processor
+        load_repository=energy_data_repository,  # ← Load data repository
+        price_repository=energy_price_repository,  # ← Price data repository
         entsoe_data_collection_config=providers.Callable(
             lambda c: c.entsoe_data_collection, config
         ),

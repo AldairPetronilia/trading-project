@@ -9,7 +9,13 @@ from app.config.database import Database
 from app.config.settings import DatabaseConfig, EntsoEClientConfig, Settings
 from app.container import Container
 from app.models.base import Base
+from app.processors.gl_market_document_processor import GlMarketDocumentProcessor
+from app.processors.publication_market_document_processor import (
+    PublicationMarketDocumentProcessor,
+)
 from app.repositories.energy_data_repository import EnergyDataRepository
+from app.repositories.energy_price_repository import EnergyPriceRepository
+from app.services.entsoe_data_service import EndpointNames, EntsoEDataService
 from dependency_injector.wiring import Provide, inject
 from sqlalchemy import text
 from testcontainers.postgres import PostgresContainer
@@ -129,6 +135,26 @@ class TestContainerIntegration:
 
         # Check for the concrete implementation since EntsoEClient is a Protocol
         assert isinstance(client, DefaultEntsoEClient)
+
+    def test_publication_market_document_processor_creation(
+        self, container: Container
+    ) -> None:
+        """Test that publication market document processor provider creates functional instance."""
+        processor = container.publication_market_document_processor()
+
+        assert isinstance(processor, PublicationMarketDocumentProcessor)
+        # Verify processor was configured properly
+        assert processor is not None
+
+    def test_energy_price_repository_provider_creation(
+        self, container: Container
+    ) -> None:
+        """Test that energy price repository provider creates functional repository."""
+        repository = container.energy_price_repository()
+
+        assert isinstance(repository, EnergyPriceRepository)
+        assert repository.database is not None
+        assert isinstance(repository.database, Database)
         # Verify the client was configured with the test token
         # Note: We can't directly access the token from the client,
         # but we can verify the client was created successfully
@@ -192,6 +218,52 @@ class TestContainerIntegration:
             # Cleanup
             async with database.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.drop_all)
+
+    @pytest.mark.asyncio
+    async def test_entsoe_data_service_with_price_support_integration(
+        self,
+        container: Container,
+    ) -> None:
+        """Test that EntsoEDataService is properly wired with both load and price dependencies."""
+        # Get service through container
+        service = container.entsoe_data_service()
+
+        assert isinstance(service, EntsoEDataService)
+
+        # Verify service has access to all required processors and repositories
+        assert service._load_processor is not None
+        assert service._price_processor is not None
+        assert service._load_repository is not None
+        assert service._price_repository is not None
+
+        # Verify correct types
+        assert isinstance(service._load_processor, GlMarketDocumentProcessor)
+        assert isinstance(service._price_processor, PublicationMarketDocumentProcessor)
+        assert isinstance(service._load_repository, EnergyDataRepository)
+        assert isinstance(service._price_repository, EnergyPriceRepository)
+
+        # Verify PRICE_ENDPOINTS configuration includes DAY_AHEAD_PRICES
+        assert EndpointNames.DAY_AHEAD_PRICES in service.PRICE_ENDPOINTS
+
+        # Test processor selection logic
+        load_processor = service._get_processor_for_endpoint(EndpointNames.ACTUAL_LOAD)
+        price_processor = service._get_processor_for_endpoint(
+            EndpointNames.DAY_AHEAD_PRICES
+        )
+
+        assert isinstance(load_processor, GlMarketDocumentProcessor)
+        assert isinstance(price_processor, PublicationMarketDocumentProcessor)
+
+        # Test repository selection logic
+        load_repository = service._get_repository_for_endpoint(
+            EndpointNames.ACTUAL_LOAD
+        )
+        price_repository = service._get_repository_for_endpoint(
+            EndpointNames.DAY_AHEAD_PRICES
+        )
+
+        assert isinstance(load_repository, EnergyDataRepository)
+        assert isinstance(price_repository, EnergyPriceRepository)
 
     def test_container_provider_scoping(self, container: Container) -> None:
         """Test that providers have correct scoping behavior."""
