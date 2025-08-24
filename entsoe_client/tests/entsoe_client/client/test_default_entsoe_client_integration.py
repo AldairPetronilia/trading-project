@@ -57,7 +57,7 @@ class TestDefaultEntsoEClientIntegration:
     def _get_test_periods(self) -> tuple[datetime, datetime]:
         """Get test period - yesterday for actual data, tomorrow for forecasts."""
         today = datetime.now(UTC).date()
-        yesterday = today - timedelta(days=1)
+        yesterday = today - timedelta(days=2)
         period_start = datetime.combine(yesterday, datetime.min.time()).replace(
             tzinfo=UTC,
         )
