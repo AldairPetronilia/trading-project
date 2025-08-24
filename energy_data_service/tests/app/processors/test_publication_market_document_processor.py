@@ -30,10 +30,12 @@ from entsoe_client.model.common.business_type import BusinessType
 from entsoe_client.model.common.contract_market_agreement_type import (
     ContractMarketAgreementType,
 )
+from entsoe_client.model.common.curve_type import CurveType
 from entsoe_client.model.common.document_type import DocumentType
 from entsoe_client.model.common.domain_mrid import DomainMRID
 from entsoe_client.model.common.market_role_type import MarketRoleType
 from entsoe_client.model.common.process_type import ProcessType
+from entsoe_client.model.market.market_domain_mrid import MarketDomainMRID
 from entsoe_client.model.market.market_participant_mrid import MarketParticipantMRID
 from entsoe_client.model.market.market_period import MarketPeriod
 from entsoe_client.model.market.market_point import MarketPoint
@@ -57,9 +59,9 @@ def sample_area_code() -> AreaCode:
 
 
 @pytest.fixture
-def sample_domain_mrid(sample_area_code: AreaCode) -> DomainMRID:
-    """Create a sample DomainMRID."""
-    return DomainMRID(value="10Y1001A1001A83F", area_code=sample_area_code)
+def sample_domain_mrid(sample_area_code: AreaCode) -> MarketDomainMRID:
+    """Create a sample MarketDomainMRID."""
+    return MarketDomainMRID(area_code=sample_area_code, coding_scheme="A01")
 
 
 @pytest.fixture
@@ -78,6 +80,12 @@ def sample_auction_type() -> AuctionType:
 def sample_contract_type() -> ContractMarketAgreementType:
     """Create a sample ContractMarketAgreementType."""
     return ContractMarketAgreementType.from_code("A01")  # Daily auction
+
+
+@pytest.fixture
+def sample_curve_type() -> CurveType:
+    """Create a sample CurveType."""
+    return CurveType.from_code("A03")  # Variable sized block
 
 
 @pytest.fixture
@@ -110,23 +118,24 @@ def sample_market_period(
 @pytest.fixture
 def sample_market_time_series(
     sample_business_type: BusinessType,
-    sample_domain_mrid: DomainMRID,
+    sample_domain_mrid: MarketDomainMRID,
     sample_auction_type: AuctionType,
     sample_contract_type: ContractMarketAgreementType,
+    sample_curve_type: CurveType,
     sample_market_period: MarketPeriod,
 ) -> MarketTimeSeries:
     """Create a sample MarketTimeSeries."""
-    time_series = MarketTimeSeries(
+    return MarketTimeSeries(
         mRID="1",
         businessType=sample_business_type,
         out_domain_mRID=sample_domain_mrid,
         auction_type=sample_auction_type,
         contract_market_agreement_type=sample_contract_type,
+        curveType=sample_curve_type,
         currency_unit_name="EUR",
         price_measure_unit_name="EUR/MWh",
+        period=sample_market_period,
     )
-    time_series.period = sample_market_period
-    return time_series
 
 
 @pytest.fixture
@@ -233,6 +242,18 @@ class TestPublicationMarketDocumentProcessor:
         # Verify these are the exact fields that were missing in the original bug
         # All 7 required database fields are properly populated
 
+        # Test optional fields are also populated correctly
+        assert (
+            price_point.revision_number
+            == sample_publication_market_document.revisionNumber
+        )
+        # curve_type should be populated from time series curveType
+        expected_curve_type = sample_publication_market_document.timeSeries[0].curveType
+        if expected_curve_type:
+            assert price_point.curve_type == expected_curve_type.code
+        else:
+            assert price_point.curve_type is None
+
     async def test_process_multiple_documents_success(
         self,
         processor: PublicationMarketDocumentProcessor,
@@ -275,7 +296,7 @@ class TestPublicationMarketDocumentProcessor:
         """Test processing document with multiple price points."""
         # Add second point to the period
         point2 = MarketPoint(position=2, price_amount=52.34)
-        sample_publication_market_document.timeSeries[0].period.points.append(point2)  # type: ignore[union-attr]
+        sample_publication_market_document.timeSeries[0].period.points.append(point2)
 
         result = await processor.process([sample_publication_market_document])
 
@@ -294,7 +315,7 @@ class TestPublicationMarketDocumentProcessor:
         """Test that points with null price amounts are skipped."""
         # Add point with null price_amount
         null_point = MarketPoint(position=2, price_amount=None)
-        sample_publication_market_document.timeSeries[0].period.points.append(  # type: ignore[union-attr]
+        sample_publication_market_document.timeSeries[0].period.points.append(
             null_point
         )
 
@@ -312,7 +333,7 @@ class TestPublicationMarketDocumentProcessor:
         """Test that points with null positions are skipped."""
         # Add point with null position
         null_point = MarketPoint(position=None, price_amount=42.0)
-        sample_publication_market_document.timeSeries[0].period.points.append(  # type: ignore[union-attr]
+        sample_publication_market_document.timeSeries[0].period.points.append(
             null_point
         )
 
@@ -375,24 +396,6 @@ class TestPublicationMarketDocumentProcessor:
 
         assert len(result) == 1
         assert result[0].contract_market_agreement_type is None
-
-    async def test_process_skips_time_series_with_null_period(
-        self,
-        processor: PublicationMarketDocumentProcessor,
-        sample_publication_market_document: PublicationMarketDocument,
-        sample_market_time_series: MarketTimeSeries,
-    ) -> None:
-        """Test that time series with null periods are skipped."""
-        # Add time series with null period
-        null_period_series = sample_market_time_series.model_copy()
-        null_period_series.mRID = "null-period"
-        null_period_series.period = None
-        sample_publication_market_document.timeSeries.append(null_period_series)
-
-        result = await processor.process([sample_publication_market_document])
-
-        # Only the first time series should be processed
-        assert len(result) == 1
 
     async def test_process_invalid_input_data_validation_error(
         self, processor: PublicationMarketDocumentProcessor
@@ -520,7 +523,7 @@ class TestPublicationMarketDocumentProcessor:
     def test_extract_area_code_success(
         self,
         processor: PublicationMarketDocumentProcessor,
-        sample_domain_mrid: DomainMRID,
+        sample_domain_mrid: MarketDomainMRID,
     ) -> None:
         """Test successful area code extraction."""
         area_code = processor._extract_area_code(sample_domain_mrid)

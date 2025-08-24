@@ -59,6 +59,7 @@ from entsoe_client.model.load.load_point import LoadPoint
 from entsoe_client.model.load.load_time_interval import LoadTimeInterval
 from entsoe_client.model.load.load_time_series import LoadTimeSeries
 from entsoe_client.model.load.market_participant_mrid import MarketParticipantMRID
+from entsoe_client.model.market.market_domain_mrid import MarketDomainMRID
 from entsoe_client.model.market.market_participant_mrid import (
     MarketParticipantMRID as MarketParticipantMRIDMarket,
 )
@@ -295,8 +296,8 @@ def create_historical_publication_market_document(
     time_series = MarketTimeSeries(
         mRID=f"historical-price-series-{area_code_str}-{base_time.strftime('%Y%m%d')}",
         businessType=BusinessType.DAY_AHEAD_PRICES,  # Use appropriate business type for prices
-        in_domain_mRID=DomainMRID(area_code=area_code),
-        out_domain_mRID=DomainMRID(area_code=area_code),
+        in_domain_mRID=MarketDomainMRID(area_code=area_code),
+        out_domain_mRID=MarketDomainMRID(area_code=area_code),
         currency_unit_name="EUR",
         price_measure_unit_name="MWH",
         curveType=CurveType.SEQUENTIAL_FIXED_SIZE_BLOCK,

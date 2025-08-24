@@ -136,9 +136,6 @@ class PublicationMarketDocumentProcessor(
             )
 
             for time_series in document.timeSeries:
-                if time_series.period is None:
-                    continue
-
                 series_points = await self._process_time_series(
                     document=document, data_type=data_type, time_series=time_series
                 )
@@ -218,9 +215,13 @@ class PublicationMarketDocumentProcessor(
                 ),
                 # Add missing required fields
                 document_mrid=document.mRID,
+                revision_number=document.revisionNumber,  # Fixed: add missing revision_number
                 time_series_mrid=time_series.mRID,
                 resolution=period.resolution,
                 document_created_at=document.createdDateTime,  # Fixed: use correct field name
+                curve_type=time_series.curveType.code
+                if time_series.curveType
+                else None,  # Fixed: add missing curve_type
                 position=point.position,
                 period_start=period.timeInterval.start,
                 period_end=period.timeInterval.end,
