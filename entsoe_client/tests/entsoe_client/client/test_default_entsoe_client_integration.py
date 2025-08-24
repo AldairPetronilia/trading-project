@@ -7,7 +7,6 @@ import pytest
 import pytest_asyncio
 from pydantic import ValidationError
 
-from entsoe_client.client.default_entsoe_client import DefaultEntsoEClient
 from entsoe_client.client.entsoe_client import EntsoEClient
 from entsoe_client.client.entsoe_client_factory import EntsoEClientFactory
 from entsoe_client.config.settings import EntsoEClientConfig
@@ -270,13 +269,10 @@ class TestDefaultEntsoEClientIntegration:
         client: EntsoEClient,
     ) -> None:
         """Test day-ahead prices retrieval against real ENTSO-E API."""
-        # Cast to DefaultEntsoEClient to access the market domain methods
-        default_client = client
-        assert isinstance(default_client, DefaultEntsoEClient)
         bidding_zone = AreaCode.CZECH_REPUBLIC
         period_start, period_end = self._get_test_periods()
 
-        result = await default_client.get_day_ahead_prices(
+        result = await client.get_day_ahead_prices(
             in_domain=bidding_zone,
             out_domain=bidding_zone,
             period_start=period_start,
