@@ -239,6 +239,50 @@ class DefaultEntsoEClient(EntsoEClient):
         request = request_builder.build_day_ahead_prices()
         return await self._execute_market_request(request)
 
+    async def get_physical_flows(
+        self,
+        in_domain: AreaCode,
+        out_domain: AreaCode,
+        period_start: datetime,
+        period_end: datetime,
+        offset: int | None = None,
+    ) -> PublicationMarketDocument | None:
+        """
+        Get physical flows for a specific domain pair and time period.
+
+        Args:
+            in_domain: The source domain/area code for the flow
+            out_domain: The destination domain/area code for the flow (must be different from in_domain)
+            period_start: Start of the time period
+            period_end: End of the time period
+            offset: Optional pagination offset
+
+        Returns:
+            PublicationMarketDocument with physical flow data, or None if no data is available
+
+        Raises:
+            EntsoEClientException: If the request fails or response cannot be parsed
+        """
+        logger.debug(
+            "Fetching physical flows for in_domain: %s, out_domain: %s, period: %s to %s, offset: %s",
+            in_domain.code,
+            out_domain.code,
+            period_start,
+            period_end,
+            offset,
+        )
+
+        request_builder = MarketDomainRequestBuilder(
+            in_domain=in_domain,
+            out_domain=out_domain,
+            period_start=period_start,
+            period_end=period_end,
+            offset=offset,
+        )
+
+        request = request_builder.build_physical_flows()
+        return await self._execute_market_request(request)
+
     async def _execute_request(
         self, request: EntsoEApiRequest
     ) -> GlMarketDocument | None:

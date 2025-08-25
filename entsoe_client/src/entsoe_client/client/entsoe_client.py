@@ -200,6 +200,34 @@ class EntsoEClient(Protocol):
         """
         ...
 
+    async def get_physical_flows(
+        self,
+        in_domain: AreaCode,
+        out_domain: AreaCode,
+        period_start: datetime,
+        period_end: datetime,
+        offset: int | None = None,
+    ) -> PublicationMarketDocument | None:
+        """
+        Retrieve physical flows [12.1.G].
+        Returns actual electricity flows between control areas (directional).
+        One year range limit applies, minimum time interval is one MTU period.
+
+        Args:
+            in_domain: The source domain/area code for the flow
+            out_domain: The destination domain/area code for the flow (must be different from in_domain)
+            period_start: Start of the time period (inclusive)
+            period_end: End of the time period (exclusive)
+            offset: Optional pagination offset for large result sets
+
+        Returns:
+            Market document containing physical flow data
+
+        Raises:
+            EntsoEClientException: If the request fails or parameters are invalid
+        """
+        ...
+
     async def close(self) -> None:
         """Close the client and release any underlying resources."""
         ...

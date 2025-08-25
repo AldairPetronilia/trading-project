@@ -14,7 +14,7 @@ from .market_time_interval import MarketTimeInterval
 from .market_time_series import MarketTimeSeries
 
 
-class PublicationMarketDocument(BaseXmlModel):  # Namespace-agnostic model
+class PublicationMarketDocument(BaseXmlModel, tag="Publication_MarketDocument"):  # type: ignore[call-arg]  # Namespace-agnostic model
     """
     Publication Market Document for ENTSO-E Market Domain responses.
 
@@ -23,9 +23,6 @@ class PublicationMarketDocument(BaseXmlModel):  # Namespace-agnostic model
     parse both 7:3 and 7:0 namespace variants after namespace stripping.
     Follows the same pattern as GlMarketDocument but adapted for market domain.
     """
-
-    class Config:
-        tag = "Publication_MarketDocument"
 
     mRID: str = element(tag="mRID")
     revisionNumber: int | None = element(tag="revisionNumber")

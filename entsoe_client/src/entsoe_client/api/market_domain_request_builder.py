@@ -85,7 +85,7 @@ class MarketDomainRequestBuilder:
         """
         Build EntsoEApiRequest for Physical Flows [12.1.G].
         DocumentType: A11 (Aggregated energy data report)
-        BusinessType: A66 (Physical flows)
+        Note: BusinessType is NOT required for physical flows per ENTSO-E API documentation.
         Domain validation: in_Domain must NOT equal out_Domain for directional flows.
         One year range limit, minimum MTU period resolution.
         """
@@ -93,7 +93,7 @@ class MarketDomainRequestBuilder:
 
         return EntsoEApiRequest(
             document_type=DocumentType.AGGREGATED_ENERGY_DATA_REPORT,  # A11
-            business_type=BusinessType.PHYSICAL_FLOWS,  # A66
+            # BusinessType is NOT set for physical flows - not required by API
             in_domain=self.in_domain,
             out_domain=self.out_domain,
             period_start=self.period_start,

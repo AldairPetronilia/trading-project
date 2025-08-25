@@ -13,6 +13,9 @@ from entsoe_client.model.common.area_code import AreaCode
 from entsoe_client.model.common.document_type import DocumentType
 from entsoe_client.model.common.process_type import ProcessType
 from entsoe_client.model.load.gl_market_document import GlMarketDocument
+from entsoe_client.model.market.publication_market_document import (
+    PublicationMarketDocument,
+)
 
 
 class TestDefaultEntsoEClient:
@@ -55,6 +58,13 @@ class TestDefaultEntsoEClient:
     def mock_gl_market_document(self) -> GlMarketDocument:
         """Create a mock GlMarketDocument."""
         mock_doc = Mock(spec=GlMarketDocument)
+        mock_doc.mRID = "TEST_ID"
+        return mock_doc
+
+    @pytest.fixture
+    def mock_publication_market_document(self) -> PublicationMarketDocument:
+        """Create a mock PublicationMarketDocument."""
+        mock_doc = Mock(spec=PublicationMarketDocument)
         mock_doc.mRID = "TEST_ID"
         return mock_doc
 
@@ -228,6 +238,29 @@ class TestDefaultEntsoEClient:
             )
 
             assert result == mock_gl_market_document
+
+    @pytest.mark.asyncio
+    async def test_get_physical_flows_success(
+        self,
+        client: DefaultEntsoEClient,
+        valid_start_date: datetime,
+        valid_end_date: datetime,
+        mock_publication_market_document: PublicationMarketDocument,
+    ) -> None:
+        """Test successful physical flows retrieval."""
+        with patch.object(
+            client,
+            "_execute_market_request",
+            return_value=mock_publication_market_document,
+        ):
+            result = await client.get_physical_flows(
+                in_domain=AreaCode.CZECH_REPUBLIC,
+                out_domain=AreaCode.SLOVAKIA,
+                period_start=valid_start_date,
+                period_end=valid_end_date,
+            )
+
+            assert result == mock_publication_market_document
 
     @pytest.mark.asyncio
     async def test_execute_request_http_error(
