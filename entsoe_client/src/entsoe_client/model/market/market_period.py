@@ -3,11 +3,14 @@
 from pydantic_xml import BaseXmlModel, element
 
 from .market_point import MarketPoint
-from .market_time_interval import ENTSOE_MARKET_NSMAP, MarketTimeInterval
+from .market_time_interval import MarketTimeInterval
 
 
-class MarketPeriod(BaseXmlModel, tag="Period", nsmap=ENTSOE_MARKET_NSMAP):  # type: ignore[call-arg]
+class MarketPeriod(BaseXmlModel):  # Namespace-agnostic model
     """Period model for market documents."""
+
+    class Config:
+        tag = "Period"
 
     timeInterval: MarketTimeInterval = element(tag="timeInterval")
     resolution: str = element(tag="resolution")

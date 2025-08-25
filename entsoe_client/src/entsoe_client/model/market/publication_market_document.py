@@ -10,17 +10,17 @@ from entsoe_client.model.common.document_type import DocumentType
 from entsoe_client.model.common.market_role_type import MarketRoleType
 
 from .market_participant_mrid import MarketParticipantMRID
-from .market_time_interval import ENTSOE_MARKET_NSMAP, MarketTimeInterval
+from .market_time_interval import MarketTimeInterval
 from .market_time_series import MarketTimeSeries
 
 
-class PublicationMarketDocument(
-    BaseXmlModel, tag="Publication_MarketDocument", nsmap=ENTSOE_MARKET_NSMAP
-):  # type: ignore[call-arg]
+class PublicationMarketDocument(BaseXmlModel, tag="Publication_MarketDocument"):  # type: ignore[call-arg]  # Namespace-agnostic model
     """
     Publication Market Document for ENTSO-E Market Domain responses.
 
-    Used for price-related data like day-ahead prices [12.1.D].
+    Used for price-related data like day-ahead prices [12.1.D] and
+    physical flows data [12.1.G]. This namespace-agnostic version can
+    parse both 7:3 and 7:0 namespace variants after namespace stripping.
     Follows the same pattern as GlMarketDocument but adapted for market domain.
     """
 

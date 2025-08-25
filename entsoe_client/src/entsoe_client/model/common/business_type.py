@@ -21,6 +21,7 @@ class BusinessType(Enum):
     MINIMUM_POSSIBLE = ("A60", "Minimum possible")
     MAXIMUM_POSSIBLE = ("A61", "Maximum possible")
     DAY_AHEAD_PRICES = ("A62", "Day-ahead prices")
+    PHYSICAL_FLOWS = ("A66", "Physical flows")
     INTERNAL_REDISPATCH = ("A85", "Internal redispatch")
     POSITIVE_FORECAST_MARGIN = (
         "A91",

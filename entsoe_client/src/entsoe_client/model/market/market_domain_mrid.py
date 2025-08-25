@@ -5,11 +5,12 @@ from pydantic_xml import BaseXmlModel, attr
 
 from entsoe_client.model.common.area_code import AreaCode
 
-from .market_time_interval import ENTSOE_MARKET_NSMAP
 
-
-class MarketDomainMRID(BaseXmlModel, tag="domain.mRID", nsmap=ENTSOE_MARKET_NSMAP):  # type: ignore[call-arg]
+class MarketDomainMRID(BaseXmlModel):  # Namespace-agnostic model
     """Domain MRID model for market documents with correct namespace."""
+
+    class Config:
+        tag = "domain.mRID"
 
     area_code: AreaCode  # Text content of the element
     coding_scheme: str | None = attr(name="codingScheme", default=None)

@@ -81,12 +81,41 @@ class MarketDomainRequestBuilder:
             offset=self.offset,
         )
 
+    def build_physical_flows(self) -> EntsoEApiRequest:
+        """
+        Build EntsoEApiRequest for Physical Flows [12.1.G].
+        DocumentType: A11 (Aggregated energy data report)
+        Note: BusinessType is NOT required for physical flows per ENTSO-E API documentation.
+        Domain validation: in_Domain must NOT equal out_Domain for directional flows.
+        One year range limit, minimum MTU period resolution.
+        """
+        self._validate_domains_for_flows(self.in_domain, self.out_domain)
+
+        return EntsoEApiRequest(
+            document_type=DocumentType.AGGREGATED_ENERGY_DATA_REPORT,  # A11
+            # BusinessType is NOT set for physical flows - not required by API
+            in_domain=self.in_domain,
+            out_domain=self.out_domain,
+            period_start=self.period_start,
+            period_end=self.period_end,
+            offset=self.offset,
+        )
+
     def _validate_domains_for_prices(
         self, in_domain: AreaCode, out_domain: AreaCode
     ) -> None:
         """Validate that domains are equal for price requests."""
         if in_domain and out_domain and in_domain != out_domain:
             raise MarketDomainRequestBuilderError.domains_must_be_equal(
+                in_domain, out_domain
+            )
+
+    def _validate_domains_for_flows(
+        self, in_domain: AreaCode, out_domain: AreaCode
+    ) -> None:
+        """Validate that domains are different for flow requests (directional)."""
+        if in_domain and out_domain and in_domain == out_domain:
+            raise MarketDomainRequestBuilderError.domains_must_be_different(
                 in_domain, out_domain
             )
 

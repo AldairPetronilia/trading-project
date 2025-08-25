@@ -132,3 +132,77 @@ class TestMarketDomainRequestBuilderValidation:
             )
 
         assert "Date range cannot exceed one year" in str(exc_info.value)
+
+
+class TestPhysicalFlowsBuilder:
+    """Test physical flows request building."""
+
+    def test_build_physical_flows_success(self) -> None:
+        """Test successful physical flows request with different domains."""
+        builder = MarketDomainRequestBuilder(
+            in_domain=AreaCode.CZECH_REPUBLIC,  # 10YCZ-CEPS-----N
+            out_domain=AreaCode.SLOVAKIA,  # 10YSK-SEPS-----K
+            period_start=datetime(2016, 1, 1, tzinfo=UTC),
+            period_end=datetime(2016, 1, 2, tzinfo=UTC),
+        )
+
+        request = builder.build_physical_flows()
+
+        assert (
+            request.document_type == DocumentType.AGGREGATED_ENERGY_DATA_REPORT
+        )  # A11
+        assert request.business_type == BusinessType.PHYSICAL_FLOWS  # A66
+        assert request.in_domain == AreaCode.CZECH_REPUBLIC
+        assert request.out_domain == AreaCode.SLOVAKIA
+
+    def test_build_physical_flows_same_domains_fails(self) -> None:
+        """Test that same domains raise validation error for flows."""
+        builder = MarketDomainRequestBuilder(
+            in_domain=AreaCode.CZECH_REPUBLIC,  # Same domain
+            out_domain=AreaCode.CZECH_REPUBLIC,  # Same domain - INVALID
+            period_start=datetime(2016, 1, 1, tzinfo=UTC),
+            period_end=datetime(2016, 1, 2, tzinfo=UTC),
+        )
+
+        with pytest.raises(MarketDomainRequestBuilderError) as exc_info:
+            builder.build_physical_flows()
+
+        assert "Physical flows require different domains" in str(exc_info.value)
+
+    def test_validation_difference_with_price_requests(self) -> None:
+        """Test that physical flows and price requests have opposite domain validation."""
+        # Same domains - valid for prices, invalid for flows
+        same_domain_builder = MarketDomainRequestBuilder(
+            in_domain=AreaCode.CZECH_REPUBLIC,
+            out_domain=AreaCode.CZECH_REPUBLIC,  # Same as in_domain
+            period_start=datetime(2016, 1, 1, tzinfo=UTC),
+            period_end=datetime(2016, 1, 2, tzinfo=UTC),
+        )
+
+        # Price request should succeed with same domains
+        price_request = same_domain_builder.build_day_ahead_prices()
+        assert price_request.business_type == BusinessType.DAY_AHEAD_PRICES
+
+        # Physical flows request should fail with same domains
+        with pytest.raises(MarketDomainRequestBuilderError) as exc_info:
+            same_domain_builder.build_physical_flows()
+        assert "Physical flows require different domains" in str(exc_info.value)
+
+        # Different domains - invalid for prices, valid for flows
+        different_domain_builder = MarketDomainRequestBuilder(
+            in_domain=AreaCode.CZECH_REPUBLIC,
+            out_domain=AreaCode.FINLAND,  # Different from in_domain
+            period_start=datetime(2016, 1, 1, tzinfo=UTC),
+            period_end=datetime(2016, 1, 2, tzinfo=UTC),
+        )
+
+        # Price request should fail with different domains
+        with pytest.raises(MarketDomainRequestBuilderError) as exc_info:
+            different_domain_builder.build_day_ahead_prices()
+        error_msg = str(exc_info.value)
+        assert "in_domain" in error_msg
+        assert "must equal out_domain" in error_msg
+
+        # Physical flows request should succeed with different domains
+        flows_request = different_domain_builder.build_physical_flows()
+        assert flows_request.business_type == BusinessType.PHYSICAL_FLOWS
