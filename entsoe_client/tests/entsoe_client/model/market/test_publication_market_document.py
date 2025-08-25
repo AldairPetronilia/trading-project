@@ -8,6 +8,7 @@ from entsoe_client.model.common.business_type import BusinessType
 from entsoe_client.model.market.publication_market_document import (
     PublicationMarketDocument,
 )
+from entsoe_client.utils.xml_namespace_utils import remove_xml_namespaces
 
 
 class TestPublicationMarketDocumentBasic:
@@ -125,8 +126,9 @@ class TestPublicationMarketDocumentXmlParsing:
 
     def test_xml_parsing_basic_structure(self, sample_price_xml: str) -> None:
         """Test basic XML parsing of PublicationMarketDocument with real data."""
-        # Parse the XML using our model
-        document = PublicationMarketDocument.from_xml(sample_price_xml)
+        # Strip namespace from XML and parse using namespace-agnostic model
+        cleaned_xml = remove_xml_namespaces(sample_price_xml)
+        document = PublicationMarketDocument.from_xml(cleaned_xml.encode())
 
         # Validate document-level fields that are working
         assert document.mRID == "f86583463b2b4fa68fe1a5e5d1d0c5cf"

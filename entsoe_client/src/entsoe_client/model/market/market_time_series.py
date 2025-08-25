@@ -12,11 +12,13 @@ from entsoe_client.model.common.curve_type import CurveType
 
 from .market_domain_mrid import MarketDomainMRID
 from .market_period import MarketPeriod
-from .market_time_interval import ENTSOE_MARKET_NSMAP
 
 
-class MarketTimeSeries(BaseXmlModel, tag="TimeSeries", nsmap=ENTSOE_MARKET_NSMAP):  # type: ignore[call-arg]
+class MarketTimeSeries(BaseXmlModel):  # Namespace-agnostic model
     """Time series model for market documents with price and quantity data."""
+
+    class Config:
+        tag = "TimeSeries"
 
     mRID: str = element(tag="mRID")
     auction_type: AuctionType | None = element(tag="auction.type", default=None)

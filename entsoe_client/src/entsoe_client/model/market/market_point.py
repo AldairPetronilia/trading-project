@@ -2,11 +2,12 @@
 
 from pydantic_xml import BaseXmlModel, element
 
-from .market_time_interval import ENTSOE_MARKET_NSMAP
 
-
-class MarketPoint(BaseXmlModel, tag="Point", nsmap=ENTSOE_MARKET_NSMAP):  # type: ignore[call-arg]
+class MarketPoint(BaseXmlModel):  # Namespace-agnostic model
     """Point model for market documents with price and quantity information."""
+
+    class Config:
+        tag = "Point"
 
     position: int | None = element(tag="position", default=None)
     price_amount: float | None = element(tag="price.amount", default=None)

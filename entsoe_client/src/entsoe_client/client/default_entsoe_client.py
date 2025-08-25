@@ -23,6 +23,7 @@ from entsoe_client.model.load.gl_market_document import GlMarketDocument
 from entsoe_client.model.market.publication_market_document import (
     PublicationMarketDocument,
 )
+from entsoe_client.utils.xml_namespace_utils import remove_xml_namespaces
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +336,9 @@ class DefaultEntsoEClient(EntsoEClient):
 
             if document_type == XmlDocumentType.PUBLICATION_MARKET_DOCUMENT:
                 logger.debug("Received Publication_MarketDocument, parsing...")
-                return PublicationMarketDocument.from_xml(xml_response)
+                # Strip namespaces to enable parsing of both 7:3 and 7:0 namespace variants
+                cleaned_xml = remove_xml_namespaces(xml_response)
+                return PublicationMarketDocument.from_xml(cleaned_xml.encode())
 
             # Unexpected document type for market domain requests
             logger.error(
