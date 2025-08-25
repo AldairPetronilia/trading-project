@@ -16,7 +16,7 @@ from .market_time_interval import ENTSOE_MARKET_NSMAP
 
 
 class MarketTimeSeries(BaseXmlModel, tag="TimeSeries", nsmap=ENTSOE_MARKET_NSMAP):  # type: ignore[call-arg]
-    """Time series model for market documents with price data."""
+    """Time series model for market documents with price and quantity data."""
 
     mRID: str = element(tag="mRID")
     auction_type: AuctionType | None = element(tag="auction.type", default=None)
@@ -33,6 +33,9 @@ class MarketTimeSeries(BaseXmlModel, tag="TimeSeries", nsmap=ENTSOE_MARKET_NSMAP
     currency_unit_name: str | None = element(tag="currency_Unit.name", default=None)
     price_measure_unit_name: str | None = element(
         tag="price_Measure_Unit.name", default=None
+    )
+    quantity_measure_unit_name: str | None = element(
+        tag="quantity_Measure_Unit.name", default=None
     )
     # Add missing field for classification sequence position
     classification_sequence_position: int | None = element(
