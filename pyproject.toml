@@ -25,6 +25,7 @@ build-backend = "hatchling.build"
 members = [
     "entsoe_client",
     "energy_data_service",
+    "energy_strategy_service",
 ]
 
 [tool.mypy]

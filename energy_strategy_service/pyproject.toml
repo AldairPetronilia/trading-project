@@ -1,0 +1,14 @@
+[project]
+name = "energy-strategy-service"
+version = "0.1.0"
+description = "Professional strategy service for energy trading signals"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.10.5",
+    "numpy>=2.3.2",
+    "pandas>=2.3.2",
+    "psycopg2-binary>=2.9.10",
+    "seaborn>=0.13.2",
+    "sqlalchemy>=2.0.41",
+]
