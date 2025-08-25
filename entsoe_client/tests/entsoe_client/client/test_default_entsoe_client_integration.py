@@ -153,7 +153,8 @@ class TestDefaultEntsoEClientIntegration:
                     for point in time_series.period.points:
                         assert point.position is not None
                         assert point.price_amount is not None
-                        assert point.price_amount > 0
+                        # Note: price_amount can be negative in energy markets (excess supply scenarios)
+                        assert isinstance(point.price_amount, (int | float))
 
     @pytest.mark.asyncio
     async def test_get_actual_total_load_real_api(
