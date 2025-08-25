@@ -44,6 +44,15 @@ class MarketDomainRequestBuilderError(ValueError):
         return cls(msg)
 
     @classmethod
+    def domains_must_be_different(
+        cls, in_domain: AreaCode, out_domain: AreaCode
+    ) -> "MarketDomainRequestBuilderError":
+        """Create error for same domains in physical flows requests."""
+        return cls(
+            f"Physical flows require different domains: in_domain={in_domain} must not equal out_domain={out_domain}"
+        )
+
+    @classmethod
     def period_start_after_end(cls) -> "MarketDomainRequestBuilderError":
         """Create error for period start after end."""
         msg = "Period start must be before period end"
